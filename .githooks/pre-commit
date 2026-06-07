@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Constitution guard: block committing real (non-synthetic) data.
+# Best practice: enforce at commit (submit) time, not on every file write.
+set -euo pipefail
+
+staged="$(git diff --cached --name-only)"
+violations="$(printf '%s\n' "$staged" | grep -E '(^|/)data/real/|(^|/)real_data/|\.real\.(csv|json|parquet|xlsx)$' || true)"
+
+if [ -n "${violations//[$'\n\t ']/}" ]; then
+  echo "COMMIT BLOCKED — synthetic-data-only rule (project constitution)."
+  echo "These staged files look like real data and cannot be committed:"
+  printf '  %s\n' $violations
+  echo "Move real data out of the repo. Only synthetic data may be committed."
+  exit 1
+fi
+
+exit 0
