@@ -63,7 +63,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 - [ ] T011 Implement the FAISS/Chroma `Retriever` in `src/coach/data_access/faiss_retriever.py` and index coaching notes (RBAC-scoped retrieval) — depends on T005, T010, T009
 - [ ] T012 [P] Implement the Bedrock Claude `LLM` wrapper in `src/coach/llm/client.py` (model id from config; only `narrate(reason)` / `draft_opener()` — MUST NOT compute or alter rankings)
 - [ ] T013 [P] Implement the PII `Guardrail` seam in `src/coach/guardrails/pii.py` (pass-through hook for MVP → Bedrock Guardrails in prod)
-- [ ] T014 [P] Implement audit/observability in `src/coach/observability/audit.py` (structured per-brief and per-LLM-call records; no out-of-scope data, no raw PII)
+- [ ] T014 [P] Implement audit/observability in `src/coach/observability/audit.py` (structured per-brief and per-LLM-call records; no out-of-scope data, no raw PII). **Record field-level data classification** (rep fields = HR-sensitive; HCP fields = private/IQVIA-PDRP) so the logger knows which fields must never be emitted (FR-016)
 
 ### Orchestrator + API skeleton
 
@@ -89,13 +89,14 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 ### Tests for User Story 1 ⚠️ (write first, ensure they fail)
 
 - [ ] T020 [P] [US1] Unit test the **deterministic scorer** in `tests/unit/test_prioritization.py` — fixed visible weights applied to the 4 signals, documented stable tie-break, identical seed → identical ranks/scores (no LLM in the path)
-- [ ] T021 [P] [US1] Example-based test in `tests/component/test_prioritization_golden.py` — known seeded District 1 input → ranked rep ids, scores, and `reason` objects match the committed golden fixture exactly
+- [ ] T021 [P] [US1] Example-based test in `tests/component/test_prioritization_golden.py` — known seeded District 1 input → ranked rep ids, scores, and `reason` objects match the committed golden fixture exactly. **Anti-LLM-ranking guard (FR-002, FR-012)**: snapshot ranks + scores before LLM narration, run narration, then assert ranks and scores are byte-for-byte identical afterward — the LLM may change only `reason.summary` text, nothing else
 - [ ] T022 [P] [US1] Component test in `tests/component/test_reps_endpoint.py` — `GET /api/reps` is RBAC-scoped, every rep has a non-empty reason, `limit` honored
+- [ ] T022a [P] [US1] **Fairness test** (FR-017) in `tests/unit/test_fairness.py` — perturbing a non-signal attribute (e.g., `tenure_months`) leaves the ranks AND scores unchanged; ranking is influenced only by the four business signals (no protected attributes or proxies)
 
 ### Implementation for User Story 1
 
 - [ ] T023 [US1] Implement the **deterministic prioritization scoring function** in `src/coach/components/prioritization.py` — pure code, fixed visible weights from config over the 4 signals; returns `list[RepRanking]` + `Reason` (signals, weights, contributions, data points). **The LLM does NOT decide ranking.** Depends on T005, T006, T009
-- [ ] T024 [US1] Implement LLM **reason narration** (separate task) in `src/coach/components/narrate.py` — turns the structured `Reason` into clear language via the LLM wrapper, without changing any rank/score. Depends on T012, T023
+- [ ] T024 [US1] Implement LLM **reason narration** (separate task) in `src/coach/components/narrate.py` — turns the structured `Reason` into clear language via the LLM wrapper, writing ONLY `reason.summary` and never touching ranks/scores (FR-002, FR-012; verified by the T021 anti-LLM-ranking guard). Depends on T012, T023
 - [ ] T025 [US1] Wire the `prioritize` node into the graph and implement `GET /api/reps` in `src/coach/api/app.py` (audit record emitted). Depends on T015, T016, T023, T024
 
 **Checkpoint**: US1 fully functional and independently testable — this is the MVP slice.
@@ -182,12 +183,26 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 **Purpose**: Whole-brief quality, UI, audit, and validation.
 
-- [ ] T038 Implement the **5-section checklist rubric** e2e test in `tests/e2e/test_brief_rubric.py` — a brief PASSES only if all 5 sections are present AND every recommendation has a visible reason (encodes the fixed rubric; SC-002/004/005/006)
+- [ ] T038 Implement the **5-section checklist rubric** e2e test in `tests/e2e/test_brief_rubric.py` — a brief PASSES only if all 5 sections are present AND every recommendation has a visible reason (encodes the fixed rubric; SC-002/004/005/006). **Consistency check (SC-004)**: run the brief twice for the same seeded DM and assert both produce an identical structured brief skeleton (same sections, same shape)
 - [ ] T039 [P] Implement the minimal web page in `web/index.html` — renders the 5 sections and each `reason` block (suggestions only; DM decides)
-- [ ] T040 [P] Audit assertions in `tests/e2e/test_audit.py` — one record per brief generation and per LLM call; no out-of-scope data, no raw PII
+- [ ] T040 [P] Audit assertions in `tests/e2e/test_audit.py` — one record per brief generation and per LLM call; no out-of-scope data, no raw PII. **Privacy-in-logging (FR-016)**: assert HR-sensitive rep fields and private HCP fields are never logged or serialized outside their allowed scope (use the field-level classification from T014)
 - [ ] T041 [P] Synthetic-only guard test in `tests/e2e/test_synthetic_only.py` — every data response carries `synthetic=true`; no real connector is configured (SC-007)
 - [ ] T042 End-to-end run of quickstart.md scenarios A–D in `tests/e2e/test_quickstart.py` (happy path, RBAC, empty/sparse, determinism golden)
 - [ ] T043 [P] Update `README.md` / docs with run + eval instructions (`/gen-synthetic-data`, `/run-checklist-eval`)
+
+---
+
+## Deferred checks (post-API)
+
+> These depend on API routes that do not exist yet. Add them once the relevant routes
+> are implemented — do not lose track of them.
+
+- **F6** — Read-only API guard test: assert the API exposes only safe/`GET` routes and no
+  write/mutation path exists (FR-011, "the assistant never acts").
+- **F7** — Graceful degrade for `GET /api/brief/{rep_id}`: when later sections (US2–US4)
+  are not yet wired, the endpoint degrades gracefully instead of failing (US5 independence).
+- **F8** — RBD read-only enforcement test: once any non-`GET` route exists, assert an RBD
+  (`read_only=true`) cannot reach a write/action path (FR-013).
 
 ---
 
