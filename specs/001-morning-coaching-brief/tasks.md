@@ -35,10 +35,10 @@ Web-service layout from plan.md: source under `src/coach/`, UI under `web/`, tes
 
 **Purpose**: Project initialization and tooling.
 
-- [ ] T001 Create project structure (`src/coach/{config,data_access,synthetic,llm,guardrails,components,orchestrator,observability,api}/`, `web/`, `tests/{unit,component,e2e}/`) per plan.md
-- [ ] T002 Initialize Python 3.11 project with deps (FastAPI, LangGraph, boto3, duckdb/sqlite3, faiss-cpu/chromadb, pydantic, pytest) in `pyproject.toml`; configure `uv sync`
-- [ ] T003 [P] Configure ruff lint+format and pytest in `pyproject.toml` / `ruff.toml` (matches the project format hook)
-- [ ] T004 [P] Implement config module in `src/coach/config/settings.py` — reads `BEDROCK_MODEL_ID`, `AWS_REGION`, `BEDROCK_EMBED_MODEL_ID`, `COACH_DB_PATH`, `COACH_SEED`, and the fixed ranking weights from env/config (NEVER hard-code the model id)
+- [X] T001 Create project structure (`src/coach/{config,data_access,synthetic,llm,guardrails,components,orchestrator,observability,api}/`, `web/`, `tests/{unit,component,e2e}/`) per plan.md
+- [X] T002 Initialize Python 3.11 project with deps (FastAPI, LangGraph, boto3, duckdb/sqlite3, faiss-cpu/chromadb, pydantic, pytest) in `pyproject.toml`; configure `uv sync`
+- [X] T003 [P] Configure ruff lint+format and pytest in `pyproject.toml` / `ruff.toml` (matches the project format hook)
+- [X] T004 [P] Implement config module in `src/coach/config/settings.py` — reads `BEDROCK_MODEL_ID`, `AWS_REGION`, `BEDROCK_EMBED_MODEL_ID`, `COACH_DB_PATH`, `COACH_SEED`, and the fixed ranking weights from env/config (NEVER hard-code the model id)
 
 ---
 
@@ -51,11 +51,11 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Interfaces, schemas, store, data, RBAC
 
-- [ ] T005 Define the data-access interface + `AccessContext` in `src/coach/data_access/interface.py` (`DataAccess` and `Retriever` Protocols, `AccessContext`, `ScopeError`) per contracts/data-access.md — **all components depend on this; built FIRST**
-- [ ] T006 [P] Implement Pydantic schemas (entities + `Reason`, `SignalContribution`, `RepRanking`, `CoachingFocus`, `AccountFocus`, `RideAlongPrep`/`EmptyState`, `Opener`, `CoachingBrief`) in `src/coach/schemas.py` per data-model.md
-- [ ] T007 Implement the structured store behind the interface in `src/coach/data_access/sqlite_store.py` (SQLite/DuckDB; `synthetic=true`) — depends on T005
+- [X] T005 Define the data-access interface + `AccessContext` in `src/coach/data_access/interface.py` (`DataAccess` and `Retriever` Protocols, `AccessContext`, `ScopeError`) per contracts/data-access.md — **all components depend on this; built FIRST**
+- [X] T006 [P] Implement Pydantic schemas (entities + `Reason`, `SignalContribution`, `RepRanking`, `CoachingFocus`, `AccountFocus`, `RideAlongPrep`/`EmptyState`, `Opener`, `CoachingBrief`) in `src/coach/schemas.py` per data-model.md
+- [X] T007 Implement the structured store behind the interface in `src/coach/data_access/sqlite_store.py` (SQLite/DuckDB; `synthetic=true`) — depends on T005
 - [ ] T008 Implement **RBAC scoping inside the data-access layer** in `src/coach/data_access/rbac.py` and enforce it in every `sqlite_store` read (DM=own district; RBD=region, read-only; out-of-scope → `ScopeError`) — depends on T005, T007
-- [ ] T009 Implement the **seeded synthetic data generator** in `src/coach/synthetic/generate.py` (1 region, 2 districts, 1 DM + 8–12 reps each, 15–30 accounts/HCPs/rep, 2–3 coaching sessions, call activity, share, volume, spend, opportunity/risk; **four ranking signals VARY across reps** incl. edge cases; some reps have 0 sessions) writing through the store schema; fixed seed; prints per-table counts + seed — depends on T007
+- [X] T009 Implement the **seeded synthetic data generator** in `src/coach/synthetic/generate.py` (1 region, 2 districts, 1 DM + 8–12 reps each, 15–30 accounts/HCPs/rep, 2–3 coaching sessions, call activity, share, volume, spend, opportunity/risk; **four ranking signals VARY across reps** incl. edge cases; some reps have 0 sessions) writing through the store schema; fixed seed; prints per-table counts + seed — depends on T007
 
 ### Provider seams (Bedrock, vector store, guardrail, observability)
 
@@ -73,8 +73,8 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 ### Foundational tests (RBAC, data, schema)
 
 - [ ] T017 [P] Unit tests for **RBAC** in `tests/unit/test_rbac.py` — DM sees only own district; RBD sees both districts read-only; out-of-scope read raises `ScopeError`; results contain zero out-of-scope rows (uses the 2-district seed)
-- [ ] T018 [P] Unit tests for the data-access interface + generator in `tests/unit/test_data_access.py` — seeded counts match the required shape; same seed → identical data (repeatability); `synthetic=true`
-- [ ] T019 [P] Unit tests for schemas in `tests/unit/test_schemas.py` — every recommendation object requires a non-empty `reason`; assembly guard rejects a missing reason
+- [X] T018 [P] Unit tests for the data-access interface + generator in `tests/unit/test_data_access.py` — seeded counts match the required shape; same seed → identical data (repeatability); `synthetic=true`
+- [X] T019 [P] Unit tests for schemas in `tests/unit/test_schemas.py` — every recommendation object requires a non-empty `reason`; assembly guard rejects a missing reason
 
 **Checkpoint**: Interface, seeded data, RBAC, provider seams, orchestrator/API skeletons ready and tested. Component work can begin.
 

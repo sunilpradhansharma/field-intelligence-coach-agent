@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Local synthetic data stores (regenerated from a fixed seed; never commit data)
+data/*.db
+data/*.duckdb
+*.faiss
+*.index
+
+# Tooling / OS
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+*.log
+.env*

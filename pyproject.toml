@@ -1,0 +1,44 @@
+[project]
+name = "field-intelligence-coach-agent"
+version = "0.1.0"
+description = "Assistant that helps district managers prepare for coaching and prioritize field time fairly (MVP: morning coaching brief)."
+requires-python = ">=3.11"
+# Full target dependency set for the MVP. Foundation modules only need `pydantic`
+# (+ stdlib sqlite3); the heavier deps are declared here for later phases and are
+# installed with `uv sync`. They are NOT imported by the foundation code/tests.
+dependencies = [
+    "pydantic>=2,<3",
+    "fastapi",
+    "uvicorn",
+    "langgraph",
+    "boto3",
+    "duckdb",
+    "faiss-cpu",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/coach"]
+
+[tool.pytest.ini_options]
+# src layout: make `import coach.*` work without an editable install.
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
