@@ -10,6 +10,90 @@
 
 ## 1. Overview
 
+### High-level technical architecture
+
+```mermaid
+flowchart TD
+    subgraph USER["User"]
+        DM["District Manager / RBD<br/>(PLANNED)"]
+    end
+
+    subgraph WEB["Web app (UI)"]
+        UI["Web page renders brief + reasons<br/>(PLANNED)"]
+    end
+
+    subgraph APILYR["API — FastAPI (coach.api.app)"]
+        API["FastAPI app<br/>identity → AccessContext<br/>(PLANNED)"]
+    end
+
+    subgraph ORCH["Orchestration — LangGraph orchestrator (PLANNED)"]
+        RANK["Ranking engine<br/>deterministic · pure code · no LLM<br/>(PLANNED)"]
+        B1["prioritize builder<br/>(PLANNED)"]
+        B2["coaching focus builder<br/>(PLANNED)"]
+        B3["ride-along prep builder<br/>(PLANNED)"]
+        B4["accounts / context builder<br/>(PLANNED)"]
+        B5["opener builder<br/>(PLANNED)"]
+    end
+
+    subgraph AI["AI — Amazon Bedrock"]
+        CLAUDE["Claude<br/>text for reasons / focus / opener<br/>(PLANNED)"]
+        TITAN["Titan Embeddings<br/>for coaching notes<br/>(PLANNED)"]
+    end
+
+    subgraph DAL["Data-access layer (RBAC enforced)"]
+        SEAM["DataAccess + Retriever<br/>single shared seam<br/>(BUILT: interface + SQLite store)"]
+    end
+
+    subgraph STORES["Data stores"]
+        SQL["SQLite / DuckDB<br/>reps, accounts, activity, share, volume, spend<br/>(BUILT: store + synthetic generator/schema)"]
+        VEC["ChromaDB / FAISS<br/>coaching-notes vectors<br/>(PLANNED)"]
+    end
+
+    DM -->|opens app| UI
+    UI -->|request brief| API
+    API -->|build brief| ORCH
+
+    B1 --> RANK
+    RANK -->|"ranks + scores (deterministic)"| B1
+    ORCH -->|"narrate reason / focus / opener text only"| CLAUDE
+
+    B3 -->|embed query| TITAN
+    TITAN -->|vector| VEC
+    VEC -->|similar notes| B3
+
+    ORCH -->|all reads via seam| SEAM
+    B1 --> SEAM
+    B2 --> SEAM
+    B3 --> SEAM
+    B4 --> SEAM
+    B5 --> SEAM
+
+    SEAM -->|structured reads| SQL
+    SEAM -->|scoped note retrieval| VEC
+
+    classDef built fill:#d7ebd2,stroke:#2e7d32,color:#1b3d1a;
+    classDef planned fill:#f3f1e7,stroke:#9e9e9e,color:#444,stroke-dasharray:4 3;
+
+    class SEAM,SQL built;
+    class DM,UI,API,RANK,B1,B2,B3,B4,B5,CLAUDE,TITAN,VEC planned;
+```
+
+**Legend:** solid green = **BUILT NOW (Phase 1)**; dashed grey = **PLANNED (later phase)**.
+Only the data-access layer talks to the stores — the builders never touch a store directly.
+
+**Data and call flow**
+
+1. The District Manager opens the web app and asks for today's coaching brief *(PLANNED UI/API)*.
+2. FastAPI turns the signed-in identity into an `AccessContext` and calls the LangGraph orchestrator *(PLANNED)*.
+3. The orchestrator reads the DM's team data **only through the data-access layer**, which enforces RBAC and returns in-scope data *(seam BUILT; RBAC enforcement PLANNED, T008)*.
+4. The ranking engine scores reps in pure code from fixed, visible weights — **no LLM** — producing ranked reps, each with a structured `Reason` *(PLANNED)*.
+5. For the chosen rep, the five builders gather coaching focus, ride-along prep, accounts/context, and an opener — every item reading through the same seam *(PLANNED)*.
+6. The ride-along prep builder embeds its query with Titan and runs a similarity search in ChromaDB/FAISS, then gets the matching notes back *(PLANNED)*.
+7. Claude on Bedrock narrates each `Reason` and drafts focus/opener **text only** — it never changes ranks or scores *(PLANNED)*.
+8. The orchestrator assembles the one-page brief (every section carries a visible reason) and the web app shows it to the DM, who decides *(PLANNED)*.
+
+---
+
 The system is a layered Python service. Components are organized top-down: people → web
 UI → an in-code orchestrator → five brief builders → a **data-access layer** → local
 stores. The data-access layer is the **single seam** every component reads through — no
