@@ -215,6 +215,59 @@ field-intelligence-coach-agent/
 
 ---
 
+## Engineering setup (Claude Code)
+
+This repo ships with a small Claude Code setup that bakes the constitution into the daily
+workflow: focused subagents for common jobs, two manual slash commands, and automatic
+guardrails that run without anyone remembering to invoke them.
+
+### Subagents (`.claude/agents/`)
+
+- **`data-explorer`** — read-only investigation of the synthetic dataset and the repo
+  (find files, search code, run `SELECT`-style reads). Use it to gather facts *before* a
+  change without cluttering the main context; it can never write, edit, or delete. Runs on
+  a **cheap/fast model (Haiku)** because the work is lookup-and-summarize, not deep
+  reasoning.
+- **`test-runner`** — runs `pytest -q` and reports a short pass/fail summary, naming any
+  failing tests with a one-line likely cause. Use it after code changes to validate; it
+  does not fix code itself. Runs on a **cheap/fast model (Haiku)** since running tests and
+  summarizing output is mechanical.
+- **`constitution-guardian`** — reviews proposed code or changes against the **9
+  constitution principles**, flagging each issue with the file, the rule broken, and a
+  concrete fix (and watching for the LLM deciding the ranking). Use it before committing a
+  feature or when unsure a change is allowed. Runs on a **strong model (Opus)** because
+  judging subtle principle violations needs real reasoning.
+
+### Skills / slash commands (`.claude/skills/`)
+
+Both are **manual-only** — they are marked `disable-model-invocation: true`, so they never
+auto-run; you trigger them explicitly.
+
+- **`/gen-synthetic-data`** — builds (or runs) the seeded synthetic data generator:
+  1 region, 2 districts, 8–12 reps each, 15–30 accounts/HCPs per rep, 2–3 coaching
+  sessions, with a fixed seed for repeatability and the four ranking signals varied across
+  reps.
+- **`/run-checklist-eval`** — runs the fixed 5-section rubric check on generated briefs: a
+  brief passes only if all five sections are present and every recommendation shows a
+  visible reason, plus the example-based (seeded) checks and a synthetic-only confirmation.
+
+### Automatic guardrails (hooks)
+
+- **Git pre-commit hook (`.githooks/pre-commit`)** — blocks any commit that stages files
+  looking like real (non-synthetic) data (e.g. `data/real/`, `real_data/`, `*.real.csv`).
+  It exists to enforce the **synthetic-only rule at commit time** — the last safe moment —
+  so real data can never slip into the repo.
+- **PostToolUse format hook (`.claude/settings.json` → `scripts/claude-format-hook.sh`)**
+  — after Claude edits or writes a file, automatically runs `ruff check --fix` and
+  `ruff format` on any `.py` file. It exists to keep formatting and lint consistent
+  automatically, so style never has to be policed by hand in review.
+
+**Why this matters:** these pieces enforce our constitution automatically and keep quality
+consistent (operational excellence), so the project does not rely on people remembering
+the rules.
+
+---
+
 ## The spec-driven workflow we followed
 
 This project was built spec-first to keep the rigor visible. The steps, in order:
