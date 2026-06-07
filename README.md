@@ -195,6 +195,19 @@ the 5 builders, and the web app are planned** in later phases (see [Phases](#pha
 
 ---
 
+## Technical architecture
+
+For engineers, a detailed technical reference lives in
+**[docs/technical-architecture.md](docs/technical-architecture.md)**. It covers the package
+map under `src/coach/`, the data-access seam (`DataAccess`/`Retriever` Protocols,
+`AccessContext`, `ScopeError`), the data model, the planned LangGraph orchestration and
+deterministic ranking, the coaching-notes RAG, LLM integration, the explainability
+contract, security/privacy, the testing strategy, and the POC→AWS production mapping. Each
+part is clearly marked **built now (Phase 1)** or **planned (later phase)** so the doc
+stays honest about the current code.
+
+---
+
 ## Tech stack
 
 - **Language:** Python 3.11+
