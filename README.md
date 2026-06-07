@@ -12,20 +12,44 @@ what happened last time, which accounts matter, and how to open the conversation
 
 ---
 
-## Status
+## MVP scope
 
 > **This is a proof of concept (POC), built spec-first, using synthetic data only.**
+> Today, only **Phase 1 (foundation) is built and tested** — see [Phases](#phases) below.
 
-- **Phase 1 (foundation) is complete and tested** — the data schemas, the data-access
-  interface (the single seam every component reads through), the SQLite store, the seeded
-  synthetic data generator, and configuration are all in place. **17 unit tests pass.**
-- **Later phases are planned, not yet built.** RBAC enforcement, the deterministic
-  ranking, the five brief components, the LLM narration layer, the orchestrator, the API,
-  and the web UI are designed (see the spec and plan) but exist today only as documented
-  placeholders. This README is careful to separate **built now** from **planned**.
+### In scope (MVP)
 
-No real customer, prescriber, or rep data is used anywhere. A pre-commit hook actively
-blocks committing files that look like real data.
+- The **morning coaching brief** and its **five sections**:
+  1. **Rep + reason** — a ranked list of reps who need attention, each with its reason.
+  2. **Coaching focus** — 1–3 focus areas for the chosen rep, each with its reason.
+  3. **Ride-along prep** — prior notes, agreed actions, and what to observe next.
+  4. **Accounts / business context** — key accounts with context and mismatch flags.
+  5. **Opener** — a short, editable way to start the morning conversation.
+- **Primary user: the district manager (DM).** The **regional business director (RBD)**
+  gets a **read-only, region-scoped** view of the same per-DM briefs.
+
+### Out of scope (MVP / later)
+
+- **Summit ranking optimization.**
+- **Leadership theme aggregation** across districts or regions (no roll-ups).
+- **Capturing notes by voice** during or after a ride.
+- **Any connection to real or live data** (Veeva, IQVIA, AEBAT, Summit, etc.) — the MVP
+  is synthetic-only.
+
+### Success criteria
+
+From the spec's measurable outcomes — these are the bar the MVP must clear:
+
+- A DM can prepare for the conversation in **under ~5 minutes** (SC-001).
+- **100% of recommendations show a reason** and the data behind them (SC-002).
+- **100% of data shown is in the user's territory** — zero out-of-scope reps, accounts,
+  or HCPs (SC-003).
+- Preparation is **more consistent and complete** than working without the assistant,
+  scored against the fixed **5-section checklist rubric** (SC-004, SC-005).
+- **Every recommendation type passes its example-based checks** on seeded data, so results
+  are **repeatable** (SC-006).
+- **100% synthetic data** — no real customer, prescriber, or rep data anywhere (SC-007).
+  A pre-commit hook actively blocks committing files that look like real data.
 
 ---
 
@@ -305,15 +329,69 @@ Lint and format (optional): `uv run ruff check --fix . && uv run ruff format .`
 
 ---
 
-## Roadmap
+## Phases
 
-| Phase | Scope | Status |
-|---|---|---|
-| **Phase 1** | Foundation: schemas, data-access interface, SQLite store, seeded synthetic generator, config | ✅ **Done & tested** |
-| **Phase 2** | RBAC enforced at the data-access layer (DM = own district; RBD = region, read-only) | ⏳ Planned (next — T008) |
-| **Phase 3** | Deterministic rep ranking (code) + LLM reason narration + `GET /api/reps` | ⏳ Planned |
-| **Phase 4–7** | The five brief sections: coaching focus, ride-along prep, accounts/context, opener | ⏳ Planned |
-| **Phase 8** | Assembly + 5-section rubric eval + audit/observability + FastAPI; then the web UI | ⏳ Planned |
+Honest status: **only Phase 1 is Done.** Everything else is planned. Task IDs below come
+straight from `specs/001-morning-coaching-brief/tasks.md`.
+
+### Phase 1 — Foundation · STATUS: ✅ Done
+
+- **Goal:** the base everything else builds on.
+- **Delivers:** the data-access interface (the single seam every component reads through),
+  the data schema (with the required `reason` object), a local SQLite store, the seeded
+  synthetic data generator (1 region, 2 districts, varied ranking signals + edge cases),
+  configuration, and their tests. **17 unit tests pass.**
+- **Tasks:** T001–T007, T009 (setup, config, interface, schemas, store, generator) and
+  the tests T018, T019.
+
+### Phase 2 — RBAC · STATUS: ⏳ Planned (next)
+
+- **Goal:** enforce role + territory **at the data-access layer** — a DM sees only their
+  own district; an RBD sees their whole region, read-only — and reject any out-of-scope
+  request with a `ScopeError`.
+- **Delivers:** RBAC scoping wired into every store read, plus its tests.
+- **Tasks:** T008 (RBAC in the data layer), T017 (RBAC tests).
+
+### Phase 3 — Deterministic ranking · STATUS: ⏳ Planned
+
+- **Goal:** rank reps with **fixed, visible weights** over the four business signals
+  (declining share, low call activity, missed follow-up, opportunity/risk). The ranking is
+  computed in code; **the LLM never decides or reorders it** — it only phrases the reason.
+- **Delivers:** the deterministic scorer, the separate LLM reason-narration step, and the
+  `GET /api/reps` endpoint — including the **fairness test** and the
+  **anti-LLM-ranking guard**.
+- **Tasks:** T023 (deterministic scorer), T024 (LLM narration, text only), T025 (wire +
+  `GET /api/reps`); tests T020 (scorer), T021 (golden + anti-LLM-ranking guard),
+  T022 (endpoint), T022a (fairness).
+
+### Phase 4 — Brief sections · STATUS: ⏳ Planned
+
+- **Goal:** build the remaining brief sections (2–5), each with its build and test tasks.
+- **Delivers:**
+  - **Coaching focus** — 1–3 focus areas, each with a reason: T027 (build), T028 (wire),
+    T026 (test).
+  - **Ride-along prep** — RAG over coaching notes; empty state when no history: T030
+    (build), T031 (wire), T029 (test).
+  - **Accounts / business context** — key accounts, context, mismatch flags: T033 (build),
+    T034 (wire), T032 (test).
+  - **Opener** — short, suggestion-only opener; full `GET /api/brief/{rep_id}`: T036
+    (build), T037 (wire full brief), T035 (test).
+
+### Phase 5 — Assembly, rubric, API · STATUS: ⏳ Planned
+
+- **Goal:** join the sections into the full brief, prove its quality, and expose it safely.
+- **Delivers:** the LangGraph assembly and FastAPI app (T015 orchestrator + brief
+  assembly, T016 API skeleton); the **5-section checklist rubric** plus the
+  **consistency check** (T038); **privacy-in-logging** / audit (T040); the synthetic-only
+  guard (T041); and end-to-end quickstart checks (T042). Then the deferred guards
+  **F6** (read-only API — no write routes), **F7** (graceful degrade of the brief
+  endpoint), and **F8** (RBD cannot reach a write/action path).
+
+### Phase 6 — UI · STATUS: ⏳ Planned
+
+- **Goal:** a simple web page that shows the brief and every reason block (suggestions
+  only; the DM decides).
+- **Delivers:** the minimal `web/index.html` page — T039.
 
 ---
 
