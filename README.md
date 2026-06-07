@@ -100,76 +100,98 @@ non-negotiable:
 
 ---
 
-## Architecture
+## How it is built (the layers)
 
-Everything reads through **one data-access interface** — components never touch a store
-directly. This is the seam that lets the POC swap synthetic data for real AWS-backed
-connectors later without a rewrite.
+The system is built in **layers**, stacked from the people who use it down to where the
+data lives. The most important rule is simple: **every part reads data through one shared
+door — the data-access layer.** Because everything goes through that one door, we can swap
+today's fake (synthetic) data for real data later without redoing the work above it.
 
 ```mermaid
 flowchart TD
-    User["DM / RBD<br/>(browser)"] --> UI["Web UI<br/>(planned)"]
-    UI --> API["FastAPI app<br/>(planned)"]
-    API --> Orch["LangGraph orchestrator<br/>explicit DAG, no loops<br/>(planned)"]
+    People["1. District manager &amp; regional business director<br/>(the people who use it)"]
+    UI["2. Web app (UI)<br/>what they see"]
+    Orch["3. Coaching brief orchestrator<br/>the coordinator that builds the brief"]
+    Builders["4. The 5 brief builders<br/>prioritize reps · coaching focus · ride-along prep · accounts &amp; business context · opener"]
+    DAL["5. Data-access layer<br/>the single shared door — RBAC enforced HERE"]
+    Stores["6. Data stores (all SYNTHETIC for the POC)<br/>SQLite / DuckDB: rep, account, activity data<br/>Notes store: coaching notes"]
 
-    Orch --> C1["1. Prioritization<br/>(planned)"]
-    Orch --> C2["2. Coaching focus<br/>(planned)"]
-    Orch --> C3["3. Ride-along prep<br/>(planned)"]
-    Orch --> C4["4. Accounts & context<br/>(planned)"]
-    Orch --> C5["5. Opener<br/>(planned)"]
-
-    C1 --> DAL
-    C2 --> DAL
-    C3 --> DAL
-    C4 --> DAL
-    C5 --> DAL
-
-    LLM["LLM narration<br/>Claude on Bedrock<br/>(planned)"] -.renders reason text only.-> C1
-    LLM -.-> C2
-    LLM -.-> C5
-
-    DAL["Data-access interface<br/>DataAccess + Retriever + AccessContext<br/>(BUILT — the single seam)"]
-    DAL --> Store["SQLite / DuckDB store<br/>structured data<br/>(BUILT)"]
-    DAL --> Vec["FAISS / Chroma<br/>coaching-notes vector store<br/>(planned)"]
-    Gen["Seeded synthetic generator<br/>(BUILT)"] --> Store
+    People --> UI --> Orch --> Builders --> DAL --> Stores
 ```
 
-### MVP choice → production AWS service
+- **District manager &amp; regional business director** — the people the brief is for.
+- **Web app (UI)** — the screen where they open and read the brief.
+- **Coaching brief orchestrator** — the coordinator that runs the steps and puts the brief
+  together.
+- **The 5 brief builders** — one per brief section: rank the reps, suggest coaching focus,
+  pull last-time prep, gather key accounts and business context, and draft an opener.
+- **Data-access layer** — the single shared door every part reads through; this is also
+  where access control (RBAC) is enforced, so a user only ever sees their own territory.
+- **Data stores** — where the data lives: a local SQLite/DuckDB database for rep, account,
+  and activity data, plus a notes store for coaching notes. All synthetic for the POC.
 
-Each MVP choice is deliberately mapped to a production AWS service, so going to production
-is a change of *source/implementation behind the interface*, not a redesign.
+### From POC to production
 
-| Concern | MVP (now) | Production (AWS) |
-|---|---|---|
-| Model inference & narration | Claude on **Amazon Bedrock** (model id from config) | Claude on Amazon Bedrock |
-| Structured data | Local **SQLite / DuckDB** | **Aurora Postgres** / **Athena + S3** |
-| Coaching-notes retrieval (RAG) | Local **FAISS / Chroma** + Bedrock (Titan) embeddings | **Bedrock Knowledge Bases** / **OpenSearch Serverless** |
-| Identity & RBAC | Simulated identity → `AccessContext` | **Amazon Cognito** (+ data-layer scope) |
-| PII / safety guardrail | Lightweight pass-through hook | **Bedrock Guardrails** |
+Each POC piece is built to be swapped for a managed AWS service later — without changing
+the layers above it.
+
+| POC piece (now) | Future AWS service |
+|---|---|
+| Web app | Same web app, hosted on AWS |
+| Orchestrator / brief builders | LangGraph + Claude on Amazon Bedrock |
+| Data-access layer | Same interface, with real connectors behind it |
+| Local SQLite / DuckDB | Amazon Aurora / Athena |
+| Notes store | Amazon Bedrock Knowledge Bases / OpenSearch |
+| Access control | Amazon Cognito |
+| Safety checks | Amazon Bedrock Guardrails |
 
 ---
 
-## How a brief is produced
+## What happens when a manager uses it (the flow)
 
-The flow below shows one morning brief end to end. Steps are marked **[BUILT]**
-(Phase 1 foundation exists) or **[PLANNED]** (designed, not yet implemented).
+Here is the step-by-step of one morning, from the moment the DM opens the app to seeing
+the finished brief.
 
 ```mermaid
-flowchart TD
-    A["DM requests today's brief<br/>[PLANNED API]"] --> B["RBAC scope check<br/>at the data-access layer<br/>[PLANNED — T008]"]
-    B --> C["Read scoped synthetic data<br/>via the data-access interface<br/>[BUILT]"]
-    C --> D["Deterministic prioritization<br/>fixed visible weights over 4 signals<br/>ranked reps + structured reasons<br/>[PLANNED — code, not LLM]"]
-    D --> E["DM picks a rep to ride with<br/>[PLANNED]"]
-    E --> F["Gather: coaching focus,<br/>ride-along prep, accounts/context, opener<br/>[PLANNED]"]
-    F --> G["LLM narrates each reason<br/>into clear language<br/>(never changes ranks/scores)<br/>[PLANNED]"]
-    G --> H["Assemble brief — every section<br/>carries a visible reason<br/>[PLANNED]"]
-    H --> I["Show brief to DM<br/>DM decides — assistant only suggests<br/>[PLANNED UI]"]
+sequenceDiagram
+    participant DM as District Manager
+    participant Web as Web App
+    participant Orch as Orchestrator
+    participant DAL as Data-Access (RBAC)
+    participant DB as Data Stores
+
+    DM->>Web: 1. Open app, ask for today's coaching brief
+    Web->>Orch: 2. Send the request
+    Orch->>DAL: 3. Ask for the DM's team data
+    DAL->>DB: 4a. Read only in-scope data
+    DAL-->>Orch: 4b. Check RBAC (own district only), return in-scope data
+    Orch->>Orch: 5. Run deterministic ranking → ranked reps, each with a reason
+    DM->>Web: 6. Pick the top rep
+    Orch->>DAL: 7. Gather for that rep: coaching focus, last-time prep,<br/>key accounts + context, suggested opener (each with a reason)
+    DAL-->>Orch: in-scope details
+    Orch->>Web: 8. Assemble the one-page brief (every item shows its reason)
+    Web-->>DM: 9. Show the brief
 ```
 
-What exists **today** is the spine the rest hangs on: the schemas that force every
-recommendation to carry a non-empty `reason`, the data-access interface and `AccessContext`
-that all reads pass through, the SQLite store, and the seeded generator that produces a
-repeatable two-district synthetic dataset with varied ranking signals and edge cases.
+The same nine steps, in plain English:
+
+1. The district manager opens the app and asks for today's coaching brief.
+2. The web app passes the request to the coordinator (orchestrator).
+3. The coordinator asks the shared data door for this manager's team data.
+4. The data door checks access rules — this manager only sees their own district — and
+   returns only the data they are allowed to see.
+5. The coordinator runs the fixed, rule-based ranking and produces a ranked list of reps,
+   each with a clear reason.
+6. The manager (or the app) picks the top rep to focus on.
+7. For that rep, the coordinator gathers the rest: what to coach, what happened last time,
+   the key accounts and how the business is doing, and a suggested way to open the talk —
+   each with its own reason.
+8. The coordinator assembles it all into one simple page where every item shows its reason.
+9. The web app shows the finished brief to the manager, who decides what to do.
+
+**What works today vs. planned:** today only the **foundation** exists — the data-access
+layer, the data schema, and the synthetic data generator. The **orchestrator, the ranking,
+the 5 builders, and the web app are planned** in later phases (see [Phases](#phases)).
 
 ---
 
