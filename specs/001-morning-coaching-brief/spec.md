@@ -19,6 +19,15 @@ and the data behind it. The assistant only suggests — the DM always decides.
 
 This MVP uses synthetic data only and scopes every view to the user's own territory.
 
+## Clarifications
+
+### Session 2026-06-07
+
+- Q: Which business signals should drive the MVP rep "needs attention" ranking? → A: The four named signals — declining share, low call activity in key accounts, missed coaching follow-up, and business opportunity/risk — combined with transparent, explainable weighting shown to the user.
+- Q: How should SC-004/SC-005 ("more consistent/complete preparation") be made measurable? → A: Define a fixed checklist rubric covering the 5 brief sections and score preparation for completeness/consistency against it.
+- Q: What is the regional business director's (RBD) scope in this MVP? → A: Read-only, region-scoped access to the same DM briefs (all districts in their region); no aggregation/roll-up.
+- Q: What size/shape should the synthetic dataset target? → A: Small realistic district — ~8–12 reps per district, ~15–30 accounts/HCPs per rep, 2–3 prior coaching sessions for most reps.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - See who to ride with and why (Priority: P1)
@@ -177,7 +186,10 @@ suggested opener appears that references the rep's specific situation.
   combines: a ranked list of reps needing attention, coaching focus areas, prior
   coaching history, key accounts/HCPs with business context, and a suggested opener.
 - **FR-002**: System MUST present a ranked list of reps in the DM's team ordered by
-  need for attention.
+  need for attention, derived from these four business signals: declining share, low
+  call activity in key accounts, missed coaching follow-up, and business
+  opportunity/risk. The relative weighting of these signals MUST be transparent and
+  shown to the user (no hidden weighting).
 - **FR-003**: System MUST show, for every ranked rep, at least one plain-language reason
   and the underlying business signal(s) that justify the ranking.
 - **FR-004**: System MUST allow the DM to select a rep and view that rep's detailed
@@ -207,7 +219,9 @@ suggested opener appears that references the rep's specific situation.
 **Access & data (constitution: RBAC; Synthetic-only; Privacy; Fairness)**
 
 - **FR-013**: System MUST restrict each user to their own territory: a DM sees only
-  their own district; a regional business director sees only their region.
+  their own district; a regional business director (RBD) has read-only, region-scoped
+  access to the same per-DM briefs across all districts in their region. The MVP does
+  NOT provide cross-district aggregation or roll-up views for the RBD.
 - **FR-014**: System MUST deny and exclude any rep, account, HCP, or district outside
   the user's territory scope, in data results (not only in the display).
 - **FR-015**: System MUST use only synthetic data in this MVP and MUST NOT connect to or
@@ -256,9 +270,10 @@ suggested opener appears that references the rep's specific situation.
   zero out-of-scope reps, accounts, or HCPs appear in any test scenario.
 - **SC-004**: In evaluation, two different DMs preparing for the same synthetic rep
   produce coaching preparation that is materially more consistent and complete than the
-  same DMs preparing without the assistant (measured against a defined preparedness
-  rubric).
-- **SC-005**: A DM following the brief covers a more complete set of the rubric's
+  same DMs preparing without the assistant, scored against a fixed preparedness
+  checklist rubric that covers the five brief sections (rep + reason, coaching focus,
+  last-time prep, accounts/business context, and opener).
+- **SC-005**: A DM following the brief covers a higher share of the fixed rubric's
   preparation items than a DM who does not use it.
 - **SC-006**: Every recommendation type passes its example-based checks (expected
   outcomes match) before release.
@@ -268,9 +283,13 @@ suggested opener appears that references the rep's specific situation.
 ## Assumptions
 
 - The primary user for this MVP is the district manager; the regional business director
-  is supported for territory scoping but is not the focus of the workflow.
+  is supported with read-only, region-scoped access to the same briefs (no aggregation),
+  but is not the focus of the workflow.
 - All data is synthetic and pre-loaded for the MVP; the brief reflects the current
   synthetic dataset rather than live or real-time sources.
+- The synthetic dataset targets a small but realistic district: ~8–12 reps per district,
+  ~15–30 accounts/HCPs per rep, and 2–3 prior coaching sessions for most reps (some reps
+  intentionally have none, to exercise empty-state behavior).
 - The ranked rep list shows a short set (assumed top 3-5) rather than the full team, to
   fit the "few minutes" goal; the exact count can be tuned during design.
 - The brief is generated for "today" (the morning of a field ride); scheduling, calendar
@@ -279,8 +298,8 @@ suggested opener appears that references the rep's specific situation.
   can be demonstrated; reps without history are handled via the empty-state behavior.
 - "Behavior may not match opportunity" is derived from comparing the rep's recent call
   activity against the account's opportunity signals in the synthetic data.
-- A defined preparedness rubric will be available to evaluate SC-004/SC-005 consistency
-  and completeness outcomes.
+- A fixed preparedness checklist rubric (covering the five brief sections) will be
+  authored to evaluate the SC-004/SC-005 consistency and completeness outcomes.
 
 ## Out of Scope (MVP)
 
