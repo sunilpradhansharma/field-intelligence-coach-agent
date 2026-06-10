@@ -223,6 +223,58 @@ class Opener(BaseModel):
     reason: Reason
 
 
+# ------------------------------------------- ride-along prep (section 3 / FR-006)
+class NoteSource(StrEnum):
+    """Provenance: which guarded path a ride-along item came from."""
+
+    structured_store = "structured_store"  # the data-access structured store
+    retriever = "retriever"  # the RBAC + PRP-scrubbed notes retriever
+
+
+class PriorNote(BaseModel):
+    """A prior coaching note (free-text recall via the retriever), with provenance."""
+
+    session_id: str
+    date: str
+    text: str
+    source: NoteSource
+
+
+class PriorActionItem(BaseModel):
+    """An agreed action or a what-to-observe-next item, with its provenance."""
+
+    session_id: str
+    date: str
+    text: str
+    source: NoteSource
+
+
+class RideAlongPrep(BaseModel):
+    """Section 3: prior notes + agreed actions + what to observe next for the selected rep.
+
+    The facts are assembled in code; the LLM writes only `reason.summary` and `opening`.
+    """
+
+    rep_id: str
+    has_history: bool = True
+    prior_notes: list[PriorNote] = Field(default_factory=list)
+    agreed_actions: list[PriorActionItem] = Field(default_factory=list)
+    observe_next: list[PriorActionItem] = Field(default_factory=list)
+    opening: str = Field(
+        min_length=1
+    )  # LLM-written opening suggestion (placeholder until narrated)
+    reason: Reason
+
+
+class EmptyState(BaseModel):
+    """Returned when a rep has no surfaceable coaching history (FR-018) — never fabricated."""
+
+    rep_id: str
+    has_history: bool = False
+    message: str = Field(min_length=1)
+    reason: Reason
+
+
 # ------------------------------------------------------- synthetic dataset
 class GenerationMeta(BaseModel):
     seed: int

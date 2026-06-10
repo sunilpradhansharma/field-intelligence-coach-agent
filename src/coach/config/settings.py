@@ -132,6 +132,11 @@ class Settings:
         default_factory=lambda: int(os.getenv("COACH_MAX_FOCUS_AREAS", "3"))
     )
 
+    # Ride-along prep (T030): how many of the most recent coaching sessions to surface.
+    ride_along_max_notes: int = field(
+        default_factory=lambda: int(os.getenv("COACH_RIDE_ALONG_MAX_NOTES", "2"))
+    )
+
 
 def get_settings() -> Settings:
     """Return settings resolved from the current environment."""

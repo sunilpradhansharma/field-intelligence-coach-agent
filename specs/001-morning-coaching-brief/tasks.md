@@ -136,11 +136,11 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T029 [P] [US3] Component test in `tests/component/test_ride_along_prep.py` — retrieval is RBAC-scoped; empty-state for a no-history rep; seeded input → expected retrieved items
+- [X] T029 [P] [US3] Component test in `tests/component/test_ride_along_prep.py` — deterministic seeded assembly (expected notes / agreed actions / observe-next; most-recent-N from config); retrieval is RBAC-scoped (out-of-scope → `ScopeError`) and PRP-scrubbed (a PRP-tied note + its fields never surfaced); provenance per item (FR-010); anti-LLM guard (only summary/opening change); empty-state for a no-history rep + "not recorded" for a missing field (FR-018)
 
 ### Implementation for User Story 3
 
-- [ ] T030 [US3] Implement `ride_along_prep` component in `src/coach/components/ride_along_prep.py` — RAG via `Retriever` + structured `agreed_actions`/`observe_next`; returns `EmptyState` when no sessions. Depends on T011, T006
+- [X] T030 [US3] Implement `ride_along_prep` component in `src/coach/components/ride_along_prep.py` — deterministic assembly: prior-note free text via the **`Retriever`** (RBAC + PRP guarded) and `agreed_actions`/`observe_next` via the **structured store**, gated to the same (PRP-scrubbed) session set; most-recent-N from config; per-item provenance; returns `EmptyState` when no surfaceable history. New schemas `RideAlongPrep`/`EmptyState`/`PriorNote`/`PriorActionItem`/`NoteSource`. LLM (`narrate_ride_along`) writes only `reason.summary` + `opening`. Depends on T011, T006
 - [ ] T031 [US3] Wire the `ride_along_prep` node into the graph and into the brief (section 3). Depends on T015, T030
 
 **Checkpoint**: US1–US3 independently functional.

@@ -10,7 +10,7 @@ just the `summary` field replaced — every other field is preserved by construc
 from __future__ import annotations
 
 from coach.llm.client import LLM
-from coach.schemas import CoachingFocus, RepRanking
+from coach.schemas import CoachingFocus, EmptyState, RepRanking, RideAlongPrep
 
 _INSTRUCTION = (
     "Write a short, plain-language reason a district manager will read about why this sales "
@@ -75,3 +75,42 @@ def narrate_focus(focus: CoachingFocus, llm: LLM) -> CoachingFocus:
 
 def narrate_focuses(focuses: list[CoachingFocus], llm: LLM) -> list[CoachingFocus]:
     return [narrate_focus(f, llm) for f in focuses]
+
+
+_RIDE_ALONG_SUMMARY_INSTRUCTION = (
+    "Write a short, plain-language summary of this rep's prior coaching: the recent notes, "
+    "agreed actions, and what to observe next. Use ONLY the facts provided — do not invent "
+    "notes or actions. If there is no history, say so plainly. One or two sentences."
+)
+_RIDE_ALONG_OPENING_INSTRUCTION = (
+    "Suggest a short, plain-language way for the district manager to OPEN the pre-ride "
+    "business conversation, grounded ONLY in the prior coaching facts provided. Do not invent "
+    "anything. One sentence."
+)
+
+
+def _ride_along_input(prep: RideAlongPrep | EmptyState) -> dict:
+    """Read-only facts handed to the LLM. It may phrase them; it may not alter them."""
+    if isinstance(prep, EmptyState):
+        return {"rep_id": prep.rep_id, "has_history": False, "message": prep.message}
+    return {
+        "rep_id": prep.rep_id,
+        "has_history": prep.has_history,
+        "prior_notes": [n.model_dump() for n in prep.prior_notes],
+        "agreed_actions": [a.model_dump() for a in prep.agreed_actions],
+        "observe_next": [o.model_dump() for o in prep.observe_next],
+    }
+
+
+def narrate_ride_along(prep: RideAlongPrep | EmptyState, llm: LLM) -> RideAlongPrep | EmptyState:
+    """Return a copy of `prep` with ONLY the wording fields written by the LLM —
+    `reason.summary` (both types) and `opening` (RideAlongPrep). The facts (notes, agreed
+    actions, observe-next, provenance, empty-state message) are preserved by construction
+    (FR-006; verified by the anti-LLM guard test)."""
+    facts = _ride_along_input(prep)
+    summary = llm.narrate(facts, _RIDE_ALONG_SUMMARY_INSTRUCTION).strip() or prep.reason.summary
+    new_reason = prep.reason.model_copy(update={"summary": summary})
+    if isinstance(prep, EmptyState):
+        return prep.model_copy(update={"reason": new_reason})
+    opening = llm.narrate(facts, _RIDE_ALONG_OPENING_INSTRUCTION).strip() or prep.opening
+    return prep.model_copy(update={"reason": new_reason, "opening": opening})
