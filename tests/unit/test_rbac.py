@@ -91,6 +91,22 @@ def test_dm_out_of_scope_read_raises_scope_error(store):
         s.get_coaching_sessions(ctx, d2_rep)
 
 
+def test_out_of_scope_and_missing_rep_are_indistinguishable(store):
+    # FR-014: an out-of-scope caller must NOT be able to tell "rep exists in another
+    # district" from "rep does not exist" — both raise the SAME error (ScopeError),
+    # raised BEFORE existence is revealed.
+    s, ds = store
+    ctx = AccessContext(
+        user_id="dm_d1", role=Role.district_manager, region_id="R1", district_id="D1"
+    )
+    real_out_of_scope = next(r.rep_id for r in ds.reps if r.district_id == "D2")
+    nonexistent = "rep_does_not_exist_zzz"
+    with pytest.raises(ScopeError):
+        s.get_rep(ctx, real_out_of_scope)
+    with pytest.raises(ScopeError):
+        s.get_rep(ctx, nonexistent)
+
+
 def test_self_scope_cannot_read_another_rep(store):
     s, ds = store
     me, other = (r.rep_id for r in ds.reps[:2])

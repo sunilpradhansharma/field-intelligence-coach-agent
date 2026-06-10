@@ -209,10 +209,13 @@ class SqliteStore(DataAccess):
         return [_rep(r) for r in rows]
 
     def get_rep(self, ctx: AccessContext, rep_id: str) -> Rep:
+        # Scope check FIRST (FR-014): a rep that is out-of-scope OR non-existent both raise
+        # ScopeError, so the caller cannot tell "exists elsewhere" from "does not exist".
+        # `require_rep_in_scope` already treats an unknown rep as out-of-scope.
+        rbac.require_rep_in_scope(self._conn, ctx, rep_id)
         row = self._conn.execute("SELECT * FROM reps WHERE rep_id = ?", (rep_id,)).fetchone()
         if row is None:
-            raise KeyError(rep_id)
-        rbac.require_rep_in_scope(self._conn, ctx, rep_id)  # -> ScopeError if out of scope
+            raise KeyError(rep_id)  # only reachable for a self-caller's own missing rep_id
         return _rep(row)
 
     def get_accounts(self, ctx: AccessContext, rep_id: str) -> list[Account]:
@@ -257,6 +260,12 @@ class SqliteStore(DataAccess):
             )
             for a in self.get_accounts(ctx, rep_id)
         ]
+
+    # TODO(T008A): PRP scrub required here — the Phase 4 per-(account, brand) read for
+    # `account_brand_metrics` (FR-007) MUST require_rep_in_scope AND drop rows whose
+    # account_id is a prp=true account (same `account_id NOT IN (SELECT account_id FROM
+    # accounts WHERE prp = 1)` pattern as get_call_activity), so no PRP HCP leaks via
+    # account_brand_metrics. Do not add the read without this scrub.
 
     def get_coaching_sessions(self, ctx: AccessContext, rep_id: str) -> list[CoachingSession]:
         rbac.require_rep_in_scope(self._conn, ctx, rep_id)
