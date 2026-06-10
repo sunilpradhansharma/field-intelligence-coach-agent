@@ -14,6 +14,7 @@ from coach.schemas import (
     AccountFocus,
     CoachingFocus,
     EmptyState,
+    Opener,
     RepRanking,
     RideAlongPrep,
 )
@@ -154,3 +155,35 @@ def narrate_account_focus(focus: AccountFocus, llm: LLM) -> AccountFocus:
 
 def narrate_account_focuses(focuses: list[AccountFocus], llm: LLM) -> list[AccountFocus]:
     return [narrate_account_focus(f, llm) for f in focuses]
+
+
+_OPENER_TEXT_INSTRUCTION = (
+    "Write a short, natural opening line a district manager can use to start the morning "
+    "business conversation with the rep. Rephrase ONLY the talking points provided — do not "
+    "add facts, numbers, brands, or recommendations that are not in them. It is a suggestion "
+    "the DM may edit, never an instruction or action. One or two sentences."
+)
+_OPENER_SUMMARY_INSTRUCTION = (
+    "In one short sentence, explain what this opener is built from, using ONLY the talking "
+    "points and their sources provided. Do not invent anything."
+)
+
+
+def _opener_input(opener: Opener) -> dict:
+    """Read-only facts handed to the LLM. It may rephrase them; it may not alter or extend."""
+    return {
+        "talking_points": [p.model_dump() for p in opener.talking_points],
+        "data_points": [d.model_dump() for d in opener.reason.data_points],
+    }
+
+
+def narrate_opener(opener: Opener, llm: LLM) -> Opener:
+    """Return a copy of `opener` with ONLY the wording written by the LLM — the opening `text`
+    and `reason.summary`. The selected talking points and their provenance are preserved by
+    construction (FR-009; verified by the anti-LLM guard), so the LLM cannot add talking
+    points or invent facts."""
+    facts = _opener_input(opener)
+    text = llm.narrate(facts, _OPENER_TEXT_INSTRUCTION).strip() or opener.text
+    summary = llm.narrate(facts, _OPENER_SUMMARY_INSTRUCTION).strip() or opener.reason.summary
+    new_reason = opener.reason.model_copy(update={"summary": summary})
+    return opener.model_copy(update={"text": text, "reason": new_reason})

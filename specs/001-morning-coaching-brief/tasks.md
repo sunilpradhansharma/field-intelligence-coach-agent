@@ -174,11 +174,11 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T035 [P] [US5] Component test in `tests/component/test_opener.py` — opener references rep-specific points, carries a reason, is presented as suggestion-only (no action)
+- [X] T035 [P] [US5] Component test in `tests/component/test_opener.py` — deterministic talking-point selection (seed 42, expected source/ref order) + config cap; provenance on every point mirrored in the reason (FR-010); suggestion-only data, no action (FR-011); anti-LLM guard (only `text` + `reason.summary` change; no points added); FR-018 no-priority rep gets the positive default opener, not fabricated
 
 ### Implementation for User Story 5
 
-- [ ] T036 [US5] Implement `opener` component in `src/coach/components/opener.py` — LLM drafts a short opener from the assembled context + a `Reason`; suggestion only. Depends on T012, T006
+- [X] T036 [US5] Implement `opener` component in `src/coach/components/opener.py` — **deterministic** talking-point selection (pure function of the already-built section outputs — priority reason, coaching focus, accounts/mismatch; introduces no new data, fetches nothing). Selects an ordered, config-capped (`opener_max_points`) set of `TalkingPoint`s (top real coaching focus + key/mismatched account + top priority signal), each with provenance (`source` + `ref`); FR-018 positive default when no high-priority signals. The LLM (`narrate_opener`) writes only the opening `text` + `reason.summary`, rephrasing the given points (no new facts/numbers/brands); suggestion only (FR-011). New schemas: `Opener.talking_points` + `TalkingPoint`/`OpenerSource`. Depends on T006, T023/T027/T033
 - [ ] T037 [US5] Wire the `opener` node into the graph and implement `GET /api/brief/{rep_id}` (full 5-section brief, RBAC `403` on out-of-scope, audit record) in `src/coach/api/app.py`. Depends on T015, T016, T036, and T028/T031/T034
 
 **Checkpoint**: All five sections of the brief are generated.

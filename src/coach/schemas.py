@@ -232,8 +232,27 @@ class AccountFocus(BaseModel):
     reason: Reason
 
 
-class Opener(BaseModel):
+class OpenerSource(StrEnum):
+    """Provenance: which already-computed brief section a talking point was built from."""
+
+    priority = "priority"  # the rep's ranking reason (section 1)
+    coaching_focus = "coaching_focus"  # section 2
+    account_mismatch = "account_mismatch"  # section 4 (a key/mismatched account)
+    default = "default"  # positive no-gap default (no high-priority signals)
+
+
+class TalkingPoint(BaseModel):
+    """One point to raise in the opening conversation, SELECTED in code from an upstream
+    section output. `ref` records exactly which input it came from (provenance)."""
+
     text: str
+    source: OpenerSource
+    ref: str
+
+
+class Opener(BaseModel):
+    text: str  # the LLM-written opening line (placeholder until narrated)
+    talking_points: list[TalkingPoint] = Field(default_factory=list)
     reason: Reason
 
 

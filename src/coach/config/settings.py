@@ -90,6 +90,9 @@ def _default_focus_thresholds() -> dict[str, float]:
 # Shown when no signal clears its trigger threshold (a low-priority, no-gap default focus).
 DEFAULT_FOCUS_AREA = "No high-priority coaching gap — reinforce current strengths"
 
+# The positive talking point used when a rep has no high-priority signals (opener fallback).
+DEFAULT_OPENER_POINT = "Reinforce current strengths and confirm the day's goals"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -143,6 +146,11 @@ class Settings:
     accounts_max: int = field(default_factory=lambda: int(os.getenv("COACH_ACCOUNTS_MAX", "5")))
     mismatch_call_threshold: int = field(
         default_factory=lambda: int(os.getenv("COACH_MISMATCH_CALL_THRESHOLD", "2"))
+    )
+
+    # Opener (T036): how many talking points to include in the suggested opener.
+    opener_max_points: int = field(
+        default_factory=lambda: int(os.getenv("COACH_OPENER_MAX_POINTS", "3"))
     )
 
 
