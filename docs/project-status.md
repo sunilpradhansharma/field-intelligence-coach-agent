@@ -27,8 +27,9 @@ synthetic.
 
 **Phase 1 Foundation (incl. the PRP + per-brand amendment), Phase 2 (RBAC + PRP
 enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested. Phase 4 (the
-brief sections) is IN PROGRESS — section 1 (coaching focus) is done, and section 2's notes
-retriever seam is done.** `pytest` → **62 passed**.
+brief sections) is IN PROGRESS — sections 1 (coaching focus) and 2 (ride-along prep) are
+done; sections 3 (accounts + per-brand context) and 4 (opener) remain.** `pytest` →
+**72 passed**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -140,8 +141,8 @@ computation was extracted into one place. **Ranking and coaching focus now share
 rollup**, so their signal numbers can never drift apart. Ranking output was verified
 **unchanged** (the T021 golden fixture is the guard and is green).
 
-**Section 2 of 4 — ride-along prep — IN PROGRESS.** Step 2a (the notes retriever **seam**)
-is DONE; Step 2b (the `ride_along_prep` component) is still PLANNED.
+**Section 2 of 4 — ride-along prep — DONE.** Step 2a (the notes retriever **seam**, T010/T011)
+and Step 2b (the `ride_along_prep` **component**, T029/T030) are both complete.
 - **Step 2a — notes retriever seam — tasks T010, T011 — DONE.**
   - **Embeddings behind an interface** (`src/coach/llm/embeddings.py`): an `EmbeddingProvider`
     Protocol with a **lazy `BedrockEmbeddings`** (Amazon Titan, **model id from config**, boto3
@@ -159,14 +160,32 @@ is DONE; Step 2b (the `ride_along_prep` component) is still PLANNED.
     free-text `notes_text` is indexed, so no seeded note field was added and no count/golden
     test needed updating). Retrieval is **synthetic-only and seeded/repeatable** (FakeEmbeddings
     + fixed seed → same notes every run). Rationale: **ADR 0002**.
-- **Step 2b — `ride_along_prep` component (PLANNED)** — consumes this retriever for prior
-  notes, agreed actions, observe-next, with an explicit empty-state for a no-history rep
-  (FR-018) — tasks T029–T031.
+- **Step 2b — `ride_along_prep` component — tasks T029, T030 — DONE**
+  (`src/coach/components/ride_along_prep.py`, FR-006/FR-010/FR-018):
+  - **Deterministic assembly, facts decided in code**: surfaces the rep's prior coaching for
+    the pre-ride conversation — **prior-note free text via the RETRIEVER** (the RBAC + PRP
+    guarded path) and **agreed actions + what-to-observe-next from the STRUCTURED store**. The
+    **most-recent-N** limit comes from config (`Settings.ride_along_max_notes`). New schemas:
+    `RideAlongPrep` / `EmptyState` / `PriorNote` / `PriorActionItem` / `NoteSource`.
+  - **Provenance on every item** (FR-010): each surfaced note/action records its `session_id`,
+    `date`, and `source` (**structured store vs retriever**); the `reason` documents both data
+    sources. Nothing is surfaced without provenance.
+  - **RBAC + PRP preserved**: both reads pass the caller's `AccessContext` and never widen
+    scope (out-of-scope rep → `ScopeError`). The structured `agreed_actions`/`observe_next` are
+    **gated to the same session set the retriever returns**, so a **PRP-tied note and its
+    structured fields are never surfaced** (the subtle leak is closed).
+  - **Edge cases, no fabrication** (FR-018): a **no-history** rep returns a clean `EmptyState`
+    ("No prior coaching history yet."); a rep whose only notes are PRP-restricted also returns
+    `EmptyState`; a missing field (e.g. empty observe-next) yields a clear **"not recorded"**
+    note rather than being dropped or invented.
+  - **LLM limited to wording**: `narrate_ride_along` (`src/coach/llm/narrate.py`) rebuilds via
+    `model_copy` so only `reason.summary` and the `opening` suggestion change — the facts
+    (notes, agreed actions, observe-next, provenance, empty-state message) are preserved by
+    construction (anti-LLM guard test verifies it). Model id from config; fake LLM in tests.
 
 **Remaining Phase 4 sections (planned):**
 1. ✅ Coaching focus — done.
-2. **Ride-along prep** — retriever seam ✅ (T010/T011); the `ride_along_prep` component
-   (T029–T031) is next.
+2. ✅ Ride-along prep — done (retriever seam T010/T011 + component T029/T030).
 3. **Accounts + per-brand business context** — key accounts with context and mismatch flags;
    first place **brand names are surfaced** to the DM (FR-007) — tasks T032–T034.
 4. **Opener** — a short suggested opener from the assembled context — tasks T035–T037.
@@ -207,11 +226,17 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   everywhere); **PRP** (≥1 PRP-tied note exists; never returned at any scope level; exclusion
   is selective); and **config/offline** embeddings (model id from config, raises if unset, no
   boto3 client/live Bedrock call).
-- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, the Phase 4
-  coaching-focus section, **and the notes retriever seam** all **COMPLIANT** (Principle V
-  scope levels; Principle IV PRP scrubbing — the retriever reuses the same helpers and is not
-  a bypass; Principles I/VI deterministic + LLM-out-of-deciding + config-controlled; Principle
-  III synthetic-only; Principle VII behind interfaces); no golden-rule violations.
+- `tests/component/test_ride_along_prep.py` (**T029**) — deterministic seeded assembly
+  (expected notes / agreed actions / observe-next; most-recent-N from config); **RBAC**
+  (out-of-scope rep → `ScopeError`) and **PRP** (a PRP-tied note + its structured fields never
+  surfaced); provenance on every item (FR-010); the **anti-LLM guard** (only summary + opening
+  change); and the FR-018 edge cases (no-history `EmptyState`; missing field → "not recorded").
+- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, and the Phase 4
+  sections built so far (**coaching focus**, the **notes retriever seam**, and the
+  **ride-along-prep component**) all **COMPLIANT** (Principle V scope levels; Principle IV PRP
+  scrubbing — reused helpers, not a bypass, structured-field leak closed; Principles I/VI
+  deterministic + LLM-out-of-deciding + config-controlled; Principle II provenance/explainable;
+  Principle III synthetic-only; Principle VII behind interfaces); no golden-rule violations.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -352,7 +377,7 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** |
 | **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** |
 | **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** |
-| **Phase 4** | The **brief sections, built one at a time**: (1) **coaching focus** ✅ T026/T027; (2) ride-along prep — **retriever seam ✅ T010/T011**, `ride_along_prep` component next; (3) accounts + per-brand context; (4) opener | **IN PROGRESS** (§1 done; §2 retriever seam done; 62 tests pass) |
+| **Phase 4** | The **brief sections, built one at a time**: (1) **coaching focus** ✅ T026/T027; (2) **ride-along prep** ✅ (retriever seam T010/T011 + component T029/T030); (3) accounts + per-brand context (T032–T034) — next; (4) opener (T035–T037) | **IN PROGRESS** (§1 + §2 done; 72 tests pass) |
 | **Phase 5** | **Assembly + rubric + API** (orchestrator, 5-section checklist rubric test, FastAPI endpoints) | Planned |
 | **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) | Planned |
 | **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
@@ -366,16 +391,16 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
    `data-model.md`, `tasks.md` — for the detailed requirements and task IDs.
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
 4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + coaching-focus +
-   notes-retriever code, and run `uv run pytest -q` to confirm the suite is green
-   (**62 passing**).
+   notes-retriever + ride-along-prep code, and run `uv run pytest -q` to confirm the suite is
+   green (**72 passing**).
 
-**Immediate next action:** build **Phase 4 Step 2b — the `ride_along_prep` component
-(T029–T031)** on top of the retriever seam (which is done, T010/T011). It should use
-`NotesRetriever.search_notes` (already RBAC-scoped + PRP-scrubbed) to surface the selected
-rep's prior notes, agreed actions, and observe-next, with an explicit **empty-state for a
-no-history rep** (FR-018). Follow the coaching-focus pattern: deterministic code decides what
-to surface; the LLM only phrases. Then sections 3 (accounts + per-brand context, T032–T034)
-and 4 (opener, T035–T037) follow.
+**Immediate next action:** build **Phase 4 section 3 — accounts + per-brand business context**
+(tasks **T032–T034**, FR-007/FR-008). The deterministic component should select the rep's key
+accounts and attach per-(account, brand) business context (share, volume, spend, performance,
+recent call activity) **labeled by brand** — this is the first section that **surfaces brand
+names** to the DM — and flag behaviour-vs-opportunity mismatches, each with a structured
+reason. Read per-(account, brand) data **only through `get_account_brand_metrics`** (already
+RBAC-scoped + PRP-scrubbed); the LLM only phrases. Then section 4 (opener, T035–T037) follows.
 
 **Still open:** **tuning the focus thresholds / ranking caps with Nisha** (see §5). When the
 **API/orchestrator** lands (Phase 5), enforce narrate-before-expose (see §5) so no
