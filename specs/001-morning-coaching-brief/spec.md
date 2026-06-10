@@ -129,7 +129,7 @@ behavior-vs-opportunity mismatch where the data warrants it.
    key accounts/HCPs is shown (not the rep's entire book).
 2. **Given** an account/HCP in the list, **When** the DM views it, **Then** simple
    business context (share, volume, performance, spend, recent call activity trend) is
-   shown.
+   shown, labeled and broken down by brand so it is clear which brand each number relates to.
 3. **Given** an account where call activity does not match opportunity, **When** the DM
    views it, **Then** the mismatch is explicitly pointed out with its reason.
 4. **Given** the accounts shown, **When** the DM views them, **Then** all are within the
@@ -200,7 +200,9 @@ suggested opener appears that references the rep's specific situation.
   sides agreed last time, and the items the DM committed to observe next.
 - **FR-007**: System MUST show a focused list of key accounts/HCPs for the selected rep
   with simple business context (market share, volume, account performance, spend, and
-  recent call activity trends).
+  recent call activity trends). This business context MUST be labeled and broken down BY
+  BRAND, so the DM can see which brand each number relates to (an account may carry
+  metrics across more than one of the modeled brands).
 - **FR-008**: System MUST point out where a rep's behavior (e.g., call activity) may not
   match the account opportunity, with the reason for the flag.
 - **FR-009**: System MUST suggest a short opener for the morning business conversation
@@ -230,6 +232,11 @@ suggested opener appears that references the rep's specific situation.
   private in how it is displayed, scoped, and (if applicable) logged.
 - **FR-017**: System MUST exclude protected attributes (and obvious proxies for them)
   from the signals that drive rep or account prioritization.
+- **FR-020**: System MUST exclude any HCP flagged as **PRP** (prescriber data
+  restriction) from all data returned to a field user. The data-access layer MUST scrub
+  PRP-flagged HCPs from results before they are returned (not only hide them in the UI),
+  so no PRP HCP appears in any brief section, list, or context. This refines the privacy
+  requirement (FR-016) for prescriber data restrictions.
 
 **Quality & states**
 
@@ -251,7 +258,10 @@ suggested opener appears that references the rep's specific situation.
 - **Coaching Focus Area**: a suggested topic to coach a rep on, with its reason and
   supporting signals.
 - **Account / HCP**: a customer or prescriber the rep covers. Attributes: market share,
-  volume, performance, spend, recent call activity trend, and opportunity level.
+  volume, performance, spend, recent call activity trend, opportunity level, and a `prp`
+  boolean (prescriber data restriction). Performance attributes (share, volume, spend,
+  call activity) are attributable to a brand in the modeled portfolio. A `prp = true` HCP
+  MUST be scrubbed by the data-access layer before any result reaches a field user (FR-020).
 - **Business Signal**: a measurable input (e.g., declining share, low call activity,
   missed follow-up, opportunity/risk) used to rank reps and accounts and to justify
   recommendations.
@@ -300,11 +310,25 @@ suggested opener appears that references the rep's specific situation.
   activity against the account's opportunity signals in the synthetic data.
 - A fixed preparedness checklist rubric (covering the five brief sections) will be
   authored to evaluate the SC-004/SC-005 consistency and completeness outcomes.
+- **Brand portfolio (data realism)**: the POC models a five-brand portfolio — LUPRON
+  PEDS, LUPRON URO, LUPRON GYN, Synthroid, and Litella (spelling of "Litella" to be
+  confirmed). Performance data (share, volume, spend, call activity) is attributable to a
+  brand. The brand names MUST live in ONE place (an enum or config value) so they are
+  easy to change later.
+- **OPEN ITEM (brand spelling)**: the brand name "Litella" is UNCONFIRMED and MUST be
+  finalized before the `Brand` enum (T007A) and the T021 golden fixture are frozen —
+  changing it afterward would invalidate the committed enum value and golden data.
+- **Terminology / external systems (confirmed facts)**: **AEBAT** is the tool/website
+  that shows strategic spend and speaker-program spend by rep — it is NOT a team. **APEX**
+  is the internal analytics support team (a support team / secondary user) — it is NOT a
+  data source.
 
 ## Out of Scope (MVP)
 
 - Summit ranking optimization.
 - Aggregating coaching themes across districts, regions, or nationally for leadership.
 - Capturing new notes by voice during or after the ride.
-- Connecting to any real or live data source (Veeva, IQVIA, AEBAT, Summit, etc.).
-- Workflows for secondary users (reps, marketing/sales leadership, training, APEX).
+- Connecting to any real or live data source (Veeva, IQVIA, AEBAT — the strategic /
+  speaker-program spend reporting tool, Summit, etc.).
+- Workflows for secondary users (reps, marketing/sales leadership, training, APEX — the
+  internal analytics support team).

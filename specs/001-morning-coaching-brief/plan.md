@@ -53,12 +53,18 @@ scoring is sub-second).
 
 **Constraints**: Synthetic data only (no real Veeva/IQVIA/AEBAT/Summit). HCP data
 treated as private (IQVIA/PDRP), rep data as HR-sensitive — designed in from day one.
-RBAC enforced server-side at the data layer. Every recommendation must carry a
-structured reason. No autonomous actions; LLM never decides rankings. Commercial (not
-GxP) but governed, secure, auditable. Model id from config.
+HCPs flagged **PRP** (prescriber data restriction) are scrubbed at the data-access layer
+before any result reaches a field user (FR-020). RBAC enforced server-side at the data
+layer. Every recommendation must carry a structured reason. No autonomous actions; LLM
+never decides rankings. Commercial (not GxP) but governed, secure, auditable. Model id
+from config.
 
 **Scale/Scope**: Synthetic: 1 region, 2 districts, 1 DM/district, 8–12 reps/district,
 15–30 accounts-HCPs/rep, 2–3 prior coaching sessions/most reps. Seeded + repeatable.
+Performance data is spread across a five-brand portfolio — LUPRON PEDS, LUPRON URO,
+LUPRON GYN, Synthroid, Litella (spelling TBC) — with brand names held in ONE place (an
+enum/config value) so they are easy to change. Some HCPs are flagged PRP to exercise the
+data-access scrubbing path (FR-020).
 
 ## Constitution Check
 

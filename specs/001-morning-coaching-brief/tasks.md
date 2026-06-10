@@ -54,8 +54,13 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 - [X] T005 Define the data-access interface + `AccessContext` in `src/coach/data_access/interface.py` (`DataAccess` and `Retriever` Protocols, `AccessContext`, `ScopeError`) per contracts/data-access.md — **all components depend on this; built FIRST**
 - [X] T006 [P] Implement Pydantic schemas (entities + `Reason`, `SignalContribution`, `RepRanking`, `CoachingFocus`, `AccountFocus`, `RideAlongPrep`/`EmptyState`, `Opener`, `CoachingBrief`) in `src/coach/schemas.py` per data-model.md
 - [X] T007 Implement the structured store behind the interface in `src/coach/data_access/sqlite_store.py` (SQLite/DuckDB; `synthetic=true`) — depends on T005
+- [ ] T007A **(Planned — Phase 1/2 amendment)** Add `prp` and brand columns + Brand enum: add the `prp` boolean to the HCP/account schema in `src/coach/data_access/sqlite_store.py`, add per-(account, brand) brand attribution to the performance and call-activity fields (see data-model.md I1 decision), and create the `Brand` enum (single source of truth) in `src/coach/config`/`src/coach/schemas.py`. **MUST run BEFORE T008A (PRP enforcement) and before the T009 generator amendment**, because both read these columns/enum. Links: FR-020 and the brand-portfolio assumption. Depends on T005, T007
 - [ ] T008 Implement **RBAC scoping inside the data-access layer** in `src/coach/data_access/rbac.py` and enforce it in every `sqlite_store` read (DM=own district; RBD=region, read-only; out-of-scope → `ScopeError`) — depends on T005, T007
+- [ ] T008A **(Planned)** Implement **PRP scrubbing at the data-access layer** — every `sqlite_store` read (and the retriever) MUST drop HCPs flagged `prp = true` before returning results, so no PRP HCP reaches a field user (FR-020, refines FR-016). Lives alongside RBAC in the data-access layer. Depends on T005, T007, **T007A** (the `prp` column must exist), T008
 - [X] T009 Implement the **seeded synthetic data generator** in `src/coach/synthetic/generate.py` (1 region, 2 districts, 1 DM + 8–12 reps each, 15–30 accounts/HCPs/rep, 2–3 coaching sessions, call activity, share, volume, spend, opportunity/risk; **four ranking signals VARY across reps** incl. edge cases; some reps have 0 sessions) writing through the store schema; fixed seed; prints per-table counts + seed — depends on T007
+  - **(Phase 1 amendment — PRP)**: the generator MUST produce some HCPs flagged `prp = true` so the PRP scrubbing path (T008A) and its test (T017A) have data to exercise. Runs AFTER T007A (the `prp` column must exist).
+  - **(Phase 1 amendment — brands)**: the generator MUST spread performance data (share, volume, spend, call activity) across the five-brand portfolio — LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid, Litella (spelling TBC) — as per-(account, brand) metrics (see data-model.md I1 decision), drawing brand names from the single `Brand` enum/config source (T007A), not hard-coded literals. Runs AFTER T007A.
+  - **(Amendment impact — tests)**: because this amendment changes the generated data/counts, the existing seeded **count/shape test T018 MUST be updated and re-run** to match the amended (PRP + 5-brand) seed, and the **T021 golden fixture MUST be authored against the amended seed** (not the pre-amendment data).
 
 ### Provider seams (Bedrock, vector store, guardrail, observability)
 
@@ -73,6 +78,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 ### Foundational tests (RBAC, data, schema)
 
 - [ ] T017 [P] Unit tests for **RBAC** in `tests/unit/test_rbac.py` — DM sees only own district; RBD sees both districts read-only; out-of-scope read raises `ScopeError`; results contain zero out-of-scope rows (uses the 2-district seed)
+- [ ] T017A [P] **(Planned)** Unit tests for **PRP scrubbing** in `tests/unit/test_prp.py` — given a seed containing PRP-flagged HCPs, assert no `prp = true` HCP appears in any data-access read or retriever result for a field user (FR-020); depends on T008A and the T009 PRP amendment
 - [X] T018 [P] Unit tests for the data-access interface + generator in `tests/unit/test_data_access.py` — seeded counts match the required shape; same seed → identical data (repeatability); `synthetic=true`
 - [X] T019 [P] Unit tests for schemas in `tests/unit/test_schemas.py` — every recommendation object requires a non-empty `reason`; assembly guard rejects a missing reason
 
@@ -88,14 +94,14 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Tests for User Story 1 ⚠️ (write first, ensure they fail)
 
-- [ ] T020 [P] [US1] Unit test the **deterministic scorer** in `tests/unit/test_prioritization.py` — fixed visible weights applied to the 4 signals, documented stable tie-break, identical seed → identical ranks/scores (no LLM in the path)
+- [ ] T020 [P] [US1] Unit test the **deterministic scorer** in `tests/unit/test_prioritization.py` — fixed visible weights applied to the 4 signals, documented stable tie-break, identical seed → identical ranks/scores (no LLM in the path). **Per-brand inputs (I1)**: the "declining share" and "low call activity in key accounts" signals read per-(account, brand) rows from `AccountBrandMetrics`/`CallActivity`; assert the rollup rule — each signal is aggregated across all of the rep's (account, brand) rows into one per-rep value before weighting — so the per-rep score is deterministic.
 - [ ] T021 [P] [US1] Example-based test in `tests/component/test_prioritization_golden.py` — known seeded District 1 input → ranked rep ids, scores, and `reason` objects match the committed golden fixture exactly. **Anti-LLM-ranking guard (FR-002, FR-012)**: snapshot ranks + scores before LLM narration, run narration, then assert ranks and scores are byte-for-byte identical afterward — the LLM may change only `reason.summary` text, nothing else
 - [ ] T022 [P] [US1] Component test in `tests/component/test_reps_endpoint.py` — `GET /api/reps` is RBAC-scoped, every rep has a non-empty reason, `limit` honored
 - [ ] T022a [P] [US1] **Fairness test** (FR-017) in `tests/unit/test_fairness.py` — perturbing a non-signal attribute (e.g., `tenure_months`) leaves the ranks AND scores unchanged; ranking is influenced only by the four business signals (no protected attributes or proxies)
 
 ### Implementation for User Story 1
 
-- [ ] T023 [US1] Implement the **deterministic prioritization scoring function** in `src/coach/components/prioritization.py` — pure code, fixed visible weights from config over the 4 signals; returns `list[RepRanking]` + `Reason` (signals, weights, contributions, data points). **The LLM does NOT decide ranking.** Depends on T005, T006, T009
+- [ ] T023 [US1] Implement the **deterministic prioritization scoring function** in `src/coach/components/prioritization.py` — pure code, fixed visible weights from config over the 4 signals; returns `list[RepRanking]` + `Reason` (signals, weights, contributions, data points). **Per-brand metrics (I1)**: the "declining share" and "low call activity in key accounts" signals read per-(account, brand) rows from `AccountBrandMetrics`/`CallActivity`, then **roll up to a single per-rep value by aggregating across all of the rep's (account, brand) rows** (simple, explicit rule — e.g., volume-weighted share decline and total calls vs. opportunity across the rep's brand rows) before applying weights; the rollup MUST be deterministic so the T021 golden fixture is stable. **The LLM does NOT decide ranking.** Depends on T005, T006, T009
 - [ ] T024 [US1] Implement LLM **reason narration** (separate task) in `src/coach/components/narrate.py` — turns the structured `Reason` into clear language via the LLM wrapper, writing ONLY `reason.summary` and never touching ranks/scores (FR-002, FR-012; verified by the T021 anti-LLM-ranking guard). Depends on T012, T023
 - [ ] T025 [US1] Wire the `prioritize` node into the graph and implement `GET /api/reps` in `src/coach/api/app.py` (audit record emitted). Depends on T015, T016, T023, T024
 
@@ -149,11 +155,11 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T032 [P] [US4] Component + example-based test in `tests/component/test_accounts_context.py` — focused list (not whole book), context fields present, mismatch flagging (low calls on high opportunity), RBAC-scoped, missing-data reported not fabricated
+- [ ] T032 [P] [US4] Component + example-based test in `tests/component/test_accounts_context.py` — focused list (not whole book), context fields present, mismatch flagging (low calls on high opportunity), RBAC-scoped, missing-data reported not fabricated. **Per-brand labeling (FR-007, finding N2)**: assert the output is broken down BY BRAND — a seeded account that carries metrics across multiple brands produces one `AccountFocus` per (account, brand), each labeled with its `brand`; assert the (account, brand) rows match the seeded `AccountBrandMetrics` for that account and no per-account collapsing occurs
 
 ### Implementation for User Story 4
 
-- [ ] T033 [US4] Implement `accounts_context` component in `src/coach/components/accounts_context.py` — selects key accounts, attaches business context, flags mismatches, each with a `Reason`. Depends on T005, T006, T009
+- [ ] T033 [US4] Implement `accounts_context` component in `src/coach/components/accounts_context.py` — selects key accounts, attaches business context, flags mismatches, each with a `Reason`. **Per-brand (I1)**: reads per-(account, brand) rows from `AccountBrandMetrics`/`CallActivity` and produces **one `AccountFocus` per (account, brand)**, labeled by brand (not one row per account); mismatch flags are evaluated per (account, brand). Depends on T005, T006, T009
 - [ ] T034 [US4] Wire the `accounts_context` node into the graph and into the brief (section 4). Depends on T015, T033
 
 **Checkpoint**: US1–US4 independently functional.
@@ -203,6 +209,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
   are not yet wired, the endpoint degrades gracefully instead of failing (US5 independence).
 - **F8** — RBD read-only enforcement test: once any non-`GET` route exists, assert an RBD
   (`read_only=true`) cannot reach a write/action path (FR-013).
+- **C2 (deferred)** — A dedicated performance-validation task for SC-001 / the ≤10s p95 brief-assembly goal is intentionally deferred for the MVP (no perf test task in scope).
 
 ---
 

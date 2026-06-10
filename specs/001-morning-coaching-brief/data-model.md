@@ -12,7 +12,7 @@ HR-sensitive (Principle IV).
 Region (1) ──< District (2) ──< User (DM, 1 per district)
                      │
                      └──< Rep (8–12) ──< Account/HCP (15–30)
-                                  │            └──< CallActivity, BusinessMetrics
+                                  │            └──< AccountBrandMetrics (per brand), CallActivity (per brand)
                                   └──< CoachingSession (2–3)
 RBD (User) ── scoped to ──> Region (read-only, all its districts)
 ```
@@ -60,21 +60,56 @@ RBD (User) ── scoped to ──> Region (read-only, all its districts)
   is display context only, excluded from the scorer.
 
 ### Account / HCP — *private (IQVIA/PDRP)*
+Identity + privacy attributes. Brand-attributable performance lives in **AccountBrandMetrics** (below).
+
 | Field | Type | Notes |
 |-------|------|-------|
 | account_id | string (PK) | |
 | rep_id | string (FK→Rep) | |
 | name | string | account or HCP display name (synthetic) |
 | type | enum {`account`, `hcp`} | |
-| market_share | float 0–1 | |
+| prp | bool | prescriber data restriction; `true` → scrubbed at the data-access layer before any result reaches a field user (FR-020) |
+
+- **Rule**: 15–30 accounts/HCPs per rep.
+- **Privacy (IV)**: An HCP with `prp = true` MUST NOT appear in any data returned to a
+  field user. The data-access layer scrubs PRP HCPs from all reads (FR-020), refining the
+  HCP-private treatment (FR-016).
+
+### AccountBrandMetrics — *private (IQVIA/PDRP)*
+**Decision (I1): performance metrics are PER-BRAND.** Share, volume, spend, performance,
+opportunity, and risk are attributable to an `(account, brand)` pair, so one account can
+carry metrics across multiple of the five brands.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| account_id | string (FK→Account) | part of composite key |
+| brand | enum Brand | part of composite key (see **Brand**) |
+| market_share | float 0–1 | for this account+brand |
 | share_trend | float | signed recent change (e.g., declining share) |
 | volume | number | |
 | spend | number | promotional/marketing spend |
-| performance | enum {`under`, `on`, `over` target} | account performance |
-| opportunity_level | enum {`low`, `med`, `high`} | opportunity |
-| risk_flag | bool | risk present |
+| performance | enum {`under`, `on`, `over` target} | account performance for this brand |
+| opportunity_level | enum {`low`, `med`, `high`} | opportunity for this brand |
+| risk_flag | bool | risk present for this brand |
 
-- **Rule**: 15–30 accounts/HCPs per rep.
+- **Key**: composite PK `(account_id, brand)`. An account has one row per brand it carries.
+- **Inherits PRP**: rows belonging to a `prp = true` account are scrubbed with the account (FR-020).
+
+### Brand (enum / config — single source of truth)
+The modeled brand portfolio. Names live in ONE place (an enum or config value) so they
+are easy to change later.
+
+| Value | Notes |
+|-------|-------|
+| `LUPRON_PEDS` | LUPRON PEDS |
+| `LUPRON_URO` | LUPRON URO |
+| `LUPRON_GYN` | LUPRON GYN |
+| `SYNTHROID` | Synthroid |
+| `LITELLA` | Litella (spelling TBC — see spec Assumptions open item) |
+
+- **Rule**: Performance data (share, volume, spend, call activity) is attributable to a
+  brand in this portfolio via the `(account, brand)` pair. No brand name is hard-coded
+  outside this enum/config.
 
 ### CallActivity
 | Field | Type | Notes |
@@ -82,12 +117,13 @@ RBD (User) ── scoped to ──> Region (read-only, all its districts)
 | activity_id | string (PK) | |
 | rep_id | string (FK→Rep) | |
 | account_id | string (FK→Account) | |
+| brand | enum Brand | call activity is per-(account, brand) (I1 decision) |
 | period | string (e.g., `2026-05`) | |
 | calls | int | recent call count |
 | calls_trend | float | signed recent change in activity |
 
 - **Used for**: "low call activity in key accounts" signal and the behavior-vs-opportunity
-  mismatch flag (low `calls` on `opportunity_level=high`).
+  mismatch flag (low `calls` on a brand whose `opportunity_level=high` for that account).
 
 ### CoachingSession (History)
 | Field | Type | Notes |
@@ -142,9 +178,14 @@ Every recommendation carries one of these.
 | Field | Type | Notes |
 |-------|------|-------|
 | account_id | string | |
-| context | {market_share, share_trend, volume, spend, performance, calls_trend} | |
-| mismatch_flag | bool | behavior vs opportunity mismatch |
+| brand | enum Brand | the brand this context row relates to (labeled to the DM) |
+| context | {market_share, share_trend, volume, spend, performance, calls_trend} | per-(account, brand) (I1) |
+| mismatch_flag | bool | behavior vs opportunity mismatch, for this account+brand |
 | reason | Reason | why this account; why the mismatch |
+
+- **Per-brand (FR-007)**: business context is labeled and broken down by brand, so the DM
+  sees which brand each number relates to. An account may contribute multiple AccountFocus
+  rows (one per brand it carries).
 
 ### CoachingBrief (assembled output)
 | Field | Type | Notes |
@@ -172,6 +213,8 @@ Every recommendation carries one of these.
 - Every output object that represents a recommendation MUST include a non-empty `reason`
   (FR-010). Tests reject any recommendation missing a reason.
 - All reads MUST be RBAC-scoped; results MUST contain only in-scope rows (FR-013/014).
+- HCPs with `prp = true` MUST be scrubbed by the data-access layer before any result is
+  returned to a field user; no PRP HCP appears in any output (FR-020).
 - Ranking MUST use only the four signals with visible weights; no protected attributes
   (FR-002/012/017).
 - `synthetic` MUST be `true` for all MVP data (FR-015).
