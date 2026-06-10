@@ -25,7 +25,7 @@ This MVP uses synthetic data only and scopes every view to the user's own territ
 
 - Q: Which business signals should drive the MVP rep "needs attention" ranking? → A: The four named signals — declining share, low call activity in key accounts, missed coaching follow-up, and business opportunity/risk — combined with transparent, explainable weighting shown to the user.
 - Q: How should SC-004/SC-005 ("more consistent/complete preparation") be made measurable? → A: Define a fixed checklist rubric covering the 5 brief sections and score preparation for completeness/consistency against it.
-- Q: What is the regional business director's (RBD) scope in this MVP? → A: Read-only, region-scoped access to the same DM briefs (all districts in their region); no aggregation/roll-up.
+- Q: What is the region-level role's scope in this MVP? → A: Region-scoped, **full access** (it can take actions — NOT read-only) to the same DM briefs (all districts in their region); no aggregation/roll-up. *(Updated — supersedes the earlier "read-only" answer; access is expressed as scope levels in FR-013.)*
 - Q: What size/shape should the synthetic dataset target? → A: Small realistic district — ~8–12 reps per district, ~15–30 accounts/HCPs per rep, 2–3 prior coaching sessions for most reps.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -171,8 +171,9 @@ suggested opener appears that references the rep's specific situation.
 - **Empty district**: a DM with no reps assigned sees a clear empty-state message.
 - **Out-of-scope request**: a DM tries to view a rep, account, or district outside
   their territory — access is denied and nothing out of scope is shown.
-- **Regional business director (RBD) view**: an RBD oversees several DMs/districts —
-  they see their region; data is still scoped to their region only.
+- **Region-level role view**: a region-level role (e.g., regional director) oversees
+  several DMs/districts — they see their whole region with full access; data is still
+  scoped to their region only.
 - **Tie / equal signals**: two reps or accounts have equal signals — ordering remains
   explainable and reason-based, not arbitrary or hidden.
 
@@ -220,10 +221,14 @@ suggested opener appears that references the rep's specific situation.
 
 **Access & data (constitution: RBAC; Synthetic-only; Privacy; Fairness)**
 
-- **FR-013**: System MUST restrict each user to their own territory: a DM sees only
-  their own district; a regional business director (RBD) has read-only, region-scoped
-  access to the same per-DM briefs across all districts in their region. The MVP does
-  NOT provide cross-district aggregation or roll-up views for the RBD.
+- **FR-013**: System MUST restrict each user to their authorized **territory scope level**,
+  enforced at the data-access layer. Scope levels are: **self** (a rep — modeled, no MVP
+  workflow), **district** (a DM — their own district), **region** (region-level roles —
+  their whole region), and **all regions** (the top sales role). All **non-rep** roles have
+  **full access within their scope** (NOT read-only); region-level and above also carry
+  action rights. **Roles map to a scope level via a single config/enum source** — role
+  names are configuration, not hard-coded logic. The MVP does NOT provide cross-district
+  aggregation or roll-up views.
 - **FR-014**: System MUST deny and exclude any rep, account, HCP, or district outside
   the user's territory scope, in data results (not only in the display).
 - **FR-015**: System MUST use only synthetic data in this MVP and MUST NOT connect to or
@@ -247,8 +252,10 @@ suggested opener appears that references the rep's specific situation.
 
 ### Key Entities *(include if feature involves data)*
 
-- **User**: a person using the assistant. Key attributes: role (district manager or
-  regional business director) and the territory (district or region) they are scoped to.
+- **User**: a person using the assistant. Key attributes: role and the **territory scope
+  level** it maps to — **self** (rep), **district** (DM), **region** (region-level roles),
+  or **all regions** (top sales role). The role-name → scope-level mapping comes from a
+  single config/enum source.
 - **District / Region (Territory)**: the access and aggregation boundary. A district
   belongs to a region; a region contains districts.
 - **Sales Representative (Rep)**: a member of a DM's team. Attributes relevant to the
@@ -292,9 +299,10 @@ suggested opener appears that references the rep's specific situation.
 
 ## Assumptions
 
-- The primary user for this MVP is the district manager; the regional business director
-  is supported with read-only, region-scoped access to the same briefs (no aggregation),
-  but is not the focus of the workflow.
+- The primary user for this MVP is the district manager; region-level (and above) roles
+  are supported with region-scoped **full access** to the same briefs (no aggregation), but
+  are not the focus of the workflow — they get access rules only, no dedicated screens in
+  the MVP.
 - All data is synthetic and pre-loaded for the MVP; the brief reflects the current
   synthetic dataset rather than live or real-time sources.
 - The synthetic dataset targets a small but realistic district: ~8–12 reps per district,

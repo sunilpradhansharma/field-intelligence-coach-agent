@@ -80,10 +80,12 @@ mapping** so the POC can grow into a governed AWS system without a rewrite (Prin
 ## 6. RBAC — enforced in the data-access layer
 
 - **Decision**: An RBAC filter sits **inside** the data-access layer. Every read is scoped
-  by the caller's `AccessContext` (role + territory): a DM is restricted to their own
-  district; an RBD gets read-only access across all districts in their region. Out-of-scope
-  rows are excluded from results, not merely hidden in the UI. RBD writes/actions are
-  rejected (read-only).
+  by the caller's `AccessContext` **scope level**, not job title: `self` (rep — modeled, no
+  MVP workflow), `district` (DM — own district), `region` (region-level roles, e.g. RD/RBE —
+  all districts in their region), `all` (top sales role — all regions). All non-rep levels
+  have **full access** (including actions), not read-only; the role-name → scope-level
+  mapping comes from a single config source. Out-of-scope rows are excluded from results,
+  not merely hidden in the UI, and an out-of-scope read raises `ScopeError`.
 - **Rationale**: Constitution V — scope must be enforced server-side at the data layer so
   the model never even sees out-of-scope data. Two districts in one region exist precisely
   to test this.
@@ -161,7 +163,7 @@ mapping** so the POC can grow into a governed AWS system without a rewrite (Prin
 |------|--------|
 | Ranking signals & weighting | Resolved (clarify §1) — deterministic, fixed visible weights |
 | Preparedness rubric | Resolved (clarify) — fixed checklist, encoded as test |
-| RBD scope | Resolved (clarify) — region read-only, no roll-up |
+| Region-level role scope | Resolved (clarify) — region scope, full access (not read-only), no roll-up |
 | Synthetic data scale | Resolved (clarify) — 1 region / 2 districts / 8–12 reps |
 | Authentication/identity | Resolved here (§7) — simulated → Cognito |
 | Audit/observability scope | Resolved here (§8) — per-brief + per-LLM-call audit logs |

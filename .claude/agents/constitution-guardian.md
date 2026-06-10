@@ -11,8 +11,12 @@ Review the given code or changes against these 9 non-negotiable principles:
 1. The assistant only suggests; the human decides. No autonomous actions.
 2. Every recommendation shows its reason and the data behind it. No hidden logic.
 3. Synthetic data only. No real customer, prescriber, or rep data anywhere.
-4. Respect data rules: HCP data private, IQVIA/PDRP rules, rep data HR-sensitive.
-5. RBAC enforced at the data-access layer (DM = own district; RBD = region, read-only).
+4. Respect data rules: HCP data private, IQVIA/PDRP rules, rep data HR-sensitive. PRP
+   scrubbing — HCPs flagged `prp` are removed at the data-access layer before any result
+   reaches a field user (FR-020).
+5. RBAC enforced at the data-access layer (DM = own district; the region-level role has
+   full access — it can take actions, not read-only). Exact role names (RD, RBE) are
+   pending confirmation — see `docs/project-status.md`.
 6. Fair, not biased. Ranking is explainable and based on business signals.
 7. Built to grow into production: data access is behind an interface; choices map
    to AWS services; the system stays governed, secure, and auditable.

@@ -15,7 +15,11 @@ what happened last time, which accounts matter, and how to open the conversation
 ## MVP scope
 
 > **This is a proof of concept (POC), built spec-first, using synthetic data only.**
-> Today, only **Phase 1 (foundation) is built and tested** — see [Phases](#phases) below.
+> Today, **Phase 1 (foundation) — including the recent PRP + brand amendment — is built
+> and tested**; later phases are planned. See [Phases](#phases) below.
+>
+> 📌 **Living status & open items:** [`docs/project-status.md`](docs/project-status.md) is
+> the project's living memory (what is BUILT vs DECIDED vs OPEN, and pending questions).
 
 ### In scope (MVP)
 
@@ -23,18 +27,24 @@ what happened last time, which accounts matter, and how to open the conversation
   1. **Rep + reason** — a ranked list of reps who need attention, each with its reason.
   2. **Coaching focus** — 1–3 focus areas for the chosen rep, each with its reason.
   3. **Ride-along prep** — prior notes, agreed actions, and what to observe next.
-  4. **Accounts / business context** — key accounts with context and mismatch flags.
+  4. **Accounts / business context** — key accounts with context (labeled **by brand**)
+     and mismatch flags.
   5. **Opener** — a short, editable way to start the morning conversation.
-- **Primary user: the district manager (DM).** The **regional business director (RBD)**
-  gets a **read-only, region-scoped** view of the same per-DM briefs.
+- This MVP builds the **OPEN** (the morning brief). A second coaching moment, the
+  **CLOSE** (end-of-session observations and development focus), is a **planned** new
+  capability to be specified later.
+- **Primary user: the district manager (DM).** A DM sees **only their own district**. The
+  **region-level role has FULL access** (it can take actions, e.g. add notes or flag a
+  rep) — it is *not* read-only. The exact role names (**RD**, **RBE**) and the hierarchy
+  are **pending confirmation** — see [`docs/project-status.md`](docs/project-status.md).
 
 ### Out of scope (MVP / later)
 
 - **Summit ranking optimization.**
 - **Leadership theme aggregation** across districts or regions (no roll-ups).
 - **Capturing notes by voice** during or after a ride.
-- **Any connection to real or live data** (Veeva, IQVIA, AEBAT, Summit, etc.) — the MVP
-  is synthetic-only.
+- **Any connection to real or live data** (Veeva, IQVIA, **AEBAT** — the strategic /
+  speaker-program spend reporting tool/website, Summit, etc.) — the MVP is synthetic-only.
 
 ### Success criteria
 
@@ -66,7 +76,9 @@ single brief made of **five sections**:
    actions both sides agreed, and what the DM said they would observe next.
 4. **Which accounts/HCPs matter and how the business is doing** — a focused list of key
    accounts with business context (share, volume, performance, spend, recent call
-   activity) and flags where the rep's behavior may not match the opportunity.
+   activity), **labeled and broken down by brand**, and flags where the rep's behavior may
+   not match the opportunity. Performance metrics are attributable to an
+   **(account, brand)** pair, so one account can carry metrics across multiple brands.
 5. **A suggested opener** — a short way to start the morning business conversation,
    referencing this rep's specific situation. A suggestion the DM can edit or ignore.
 
@@ -87,9 +99,14 @@ non-negotiable:
   signals. No black-box output.
 - **Synthetic data only in the POC.** Data mirrors the *shape* of real data but is fully
   fabricated and clearly labeled synthetic.
-- **RBAC by territory, enforced at the data layer.** A DM sees only their own district; an
-  RBD sees their region, read-only. Scope is enforced server-side, not just hidden in the
-  UI.
+- **RBAC by territory, enforced at the data layer.** A DM sees only their own district;
+  the region-level role has **full access** (it can take actions), not read-only. Scope is
+  enforced server-side, not just hidden in the UI. (Exact role names — RD, RBE — and the
+  hierarchy are pending confirmation; see [`docs/project-status.md`](docs/project-status.md).)
+- **PRP prescriber-data restriction.** HCPs flagged **PRP** are scrubbed at the
+  data-access layer before any result reaches a field user (planned enforcement, Phase 2).
+- **Brand-aware data.** Performance is per **(account, brand)**; the five brand names live
+  in **one** place (the `Brand` enum) so they are easy to change.
 - **Ranking is deterministic, not LLM-decided.** The rep prioritization is computed in
   code from fixed, visible weights over legitimate business signals. The LLM only turns
   the structured reason into clear language — it never decides or reorders the ranking.
@@ -230,6 +247,9 @@ stays honest about the current code.
 field-intelligence-coach-agent/
 ├── README.md                       # you are here
 ├── CLAUDE.md                       # golden rules + stack + commands for contributors/agents
+├── docs/
+│   ├── project-status.md           # living memory: BUILT vs DECIDED vs OPEN + open items
+│   └── technical-architecture.md   # engineer reference (module map, data model, flows)
 ├── pyproject.toml                  # deps, pytest config, ruff config
 ├── .githooks/pre-commit            # blocks committing real (non-synthetic) data
 ├── .specify/                       # Spec Kit + the project constitution
@@ -240,7 +260,7 @@ field-intelligence-coach-agent/
 │   ├── tasks.md                    # the dependency-ordered task list (T001…T043)
 │   └── checklists/                 # spec-quality checklist(s)
 ├── src/coach/
-│   ├── schemas.py                  # BUILT — entities, Reason, recommendation objects, Dataset
+│   ├── schemas.py                  # BUILT — entities, Reason, recommendation objects, Dataset; Brand enum, prp flag, AccountBrandMetrics (per account+brand)
 │   ├── config/settings.py          # BUILT — model id (from env), seed, fixed ranking weights
 │   ├── data_access/
 │   │   ├── interface.py            # BUILT — DataAccess + Retriever + AccessContext + ScopeError
@@ -353,7 +373,7 @@ uv sync
 # 2. Generate the seeded synthetic dataset (repeatable; writes ./data/coach.db)
 uv run python -m coach.synthetic.generate --seed 42
 
-# 3. Run the test suite (17 tests today)
+# 3. Run the test suite (22 tests today)
 uv run pytest
 ```
 
@@ -375,17 +395,26 @@ straight from `specs/001-morning-coaching-brief/tasks.md`.
 - **Delivers:** the data-access interface (the single seam every component reads through),
   the data schema (with the required `reason` object), a local SQLite store, the seeded
   synthetic data generator (1 region, 2 districts, varied ranking signals + edge cases),
-  configuration, and their tests. **17 unit tests pass.**
-- **Tasks:** T001–T007, T009 (setup, config, interface, schemas, store, generator) and
-  the tests T018, T019.
+  configuration, and their tests. **Plus the PRP + brand amendment**: the `Brand` enum
+  (five brands), the `prp` flag on HCPs/accounts, and per-(account, brand) metrics
+  (`AccountBrandMetrics`); the generator now flags ~5–10% of HCPs as PRP and spreads
+  metrics across the five brands. **22 unit tests pass.**
+- **Tasks:** T001–T007, T009 (setup, config, interface, schemas, store, generator), the
+  amendment **T007A** (`prp` + brand columns + `Brand` enum) and the T009 generator
+  amendment, and the tests T018, T019.
 
-### Phase 2 — RBAC · STATUS: ⏳ Planned (next)
+### Phase 2 — RBAC + PRP scrubbing · STATUS: ⏳ Planned (next)
 
 - **Goal:** enforce role + territory **at the data-access layer** — a DM sees only their
-  own district; an RBD sees their whole region, read-only — and reject any out-of-scope
-  request with a `ScopeError`.
-- **Delivers:** RBAC scoping wired into every store read, plus its tests.
-- **Tasks:** T008 (RBAC in the data layer), T017 (RBAC tests).
+  own district; the region-level role has **full access** (can take actions) — and reject
+  any out-of-scope request with a `ScopeError`. Also **scrub PRP-flagged HCPs** from every
+  read before any result reaches a field user.
+- **Delivers:** RBAC scoping wired into every store read, PRP scrubbing at the data layer,
+  plus their tests.
+- **Tasks:** T008 (RBAC in the data layer), T008A (PRP scrubbing), T017 (RBAC tests),
+  T017A (PRP scrubbing tests).
+- **Blocked on:** confirming the exact role model (RD / RBE / Head of Sales scope) — see
+  [`docs/project-status.md`](docs/project-status.md).
 
 ### Phase 3 — Deterministic ranking · STATUS: ⏳ Planned
 
@@ -420,13 +449,23 @@ straight from `specs/001-morning-coaching-brief/tasks.md`.
   **consistency check** (T038); **privacy-in-logging** / audit (T040); the synthetic-only
   guard (T041); and end-to-end quickstart checks (T042). Then the deferred guards
   **F6** (read-only API — no write routes), **F7** (graceful degrade of the brief
-  endpoint), and **F8** (RBD cannot reach a write/action path).
+  endpoint), and **F8** (the region-level role cannot reach a write/action path).
+  > ⚠️ **F6/F8 under review:** now that the region-level role has **full (write) access**
+  > (can add notes / flag a rep), these read-only guards must be reconsidered — write/action
+  > paths will exist. See the OPEN items in [`docs/project-status.md`](docs/project-status.md).
 
 ### Phase 6 — UI · STATUS: ⏳ Planned
 
 - **Goal:** a simple web page that shows the brief and every reason block (suggestions
   only; the DM decides).
 - **Delivers:** the minimal `web/index.html` page — T039.
+
+### Planned additional capability — the CLOSE · STATUS: ⏳ Planned (new spec)
+
+- **Goal:** support the **CLOSE** coaching moment (end of session) alongside the OPEN
+  morning brief — capturing observations and the areas of focus/development going forward.
+- **Status:** needs its own spec; informed by an upcoming coaching workshop (~60 min with
+  a few DMs and RDs). See [`docs/project-status.md`](docs/project-status.md).
 
 ---
 
@@ -435,6 +474,13 @@ straight from `specs/001-morning-coaching-brief/tasks.md`.
 - **Synthetic data only** for this POC — no real Veeva, IQVIA, AEBAT, or Summit data ever
   enters the environment; synthetic data is clearly labeled (`synthetic=true`) and never
   presented as real performance.
+- **Terminology:** **AEBAT** is a tool/website showing strategic spend and speaker-program
+  spend by rep (it is *not* a team). **APEX** is the internal analytics support team (a
+  support team / secondary user, *not* a data source).
+- **PRP (prescriber data restriction):** HCPs flagged PRP are **scrubbed at the
+  data-access layer** before any result reaches a field user (modeled now; enforcement in
+  Phase 2). The brand portfolio modeled is LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid,
+  and Litella (spelling unconfirmed), held in one `Brand` enum.
 - This is a **commercial system, not GxP** — but it is designed to be governed, secure,
   and auditable from day one.
 - **HCP/prescriber data is treated as private** (IQVIA / PDRP rules) and **rep performance

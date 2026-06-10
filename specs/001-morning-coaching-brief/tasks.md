@@ -55,7 +55,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 - [X] T006 [P] Implement Pydantic schemas (entities + `Reason`, `SignalContribution`, `RepRanking`, `CoachingFocus`, `AccountFocus`, `RideAlongPrep`/`EmptyState`, `Opener`, `CoachingBrief`) in `src/coach/schemas.py` per data-model.md
 - [X] T007 Implement the structured store behind the interface in `src/coach/data_access/sqlite_store.py` (SQLite/DuckDB; `synthetic=true`) — depends on T005
 - [ ] T007A **(Planned — Phase 1/2 amendment)** Add `prp` and brand columns + Brand enum: add the `prp` boolean to the HCP/account schema in `src/coach/data_access/sqlite_store.py`, add per-(account, brand) brand attribution to the performance and call-activity fields (see data-model.md I1 decision), and create the `Brand` enum (single source of truth) in `src/coach/config`/`src/coach/schemas.py`. **MUST run BEFORE T008A (PRP enforcement) and before the T009 generator amendment**, because both read these columns/enum. Links: FR-020 and the brand-portfolio assumption. Depends on T005, T007
-- [ ] T008 Implement **RBAC scoping inside the data-access layer** in `src/coach/data_access/rbac.py` and enforce it in every `sqlite_store` read (DM=own district; RBD=region, read-only; out-of-scope → `ScopeError`) — depends on T005, T007
+- [ ] T008 Implement **RBAC scoping inside the data-access layer** in `src/coach/data_access/rbac.py` and enforce it in every `sqlite_store` read by **territory scope level**: `self` (rep), `district` (DM — own district only), `region` (region-level roles — all districts in their region), `all` (top sales role — all regions). All non-rep levels have **full access** (not read-only); the role-name → scope-level mapping comes from a single config/enum source. Out-of-scope read → `ScopeError`. — depends on T005, T007
 - [ ] T008A **(Planned)** Implement **PRP scrubbing at the data-access layer** — every `sqlite_store` read (and the retriever) MUST drop HCPs flagged `prp = true` before returning results, so no PRP HCP reaches a field user (FR-020, refines FR-016). Lives alongside RBAC in the data-access layer. Depends on T005, T007, **T007A** (the `prp` column must exist), T008
 - [X] T009 Implement the **seeded synthetic data generator** in `src/coach/synthetic/generate.py` (1 region, 2 districts, 1 DM + 8–12 reps each, 15–30 accounts/HCPs/rep, 2–3 coaching sessions, call activity, share, volume, spend, opportunity/risk; **four ranking signals VARY across reps** incl. edge cases; some reps have 0 sessions) writing through the store schema; fixed seed; prints per-table counts + seed — depends on T007
   - **(Phase 1 amendment — PRP)**: the generator MUST produce some HCPs flagged `prp = true` so the PRP scrubbing path (T008A) and its test (T017A) have data to exercise. Runs AFTER T007A (the `prp` column must exist).
@@ -77,7 +77,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Foundational tests (RBAC, data, schema)
 
-- [ ] T017 [P] Unit tests for **RBAC** in `tests/unit/test_rbac.py` — DM sees only own district; RBD sees both districts read-only; out-of-scope read raises `ScopeError`; results contain zero out-of-scope rows (uses the 2-district seed)
+- [ ] T017 [P] Unit tests for **RBAC scope levels** in `tests/unit/test_rbac.py` — assert each scope level sees exactly its territory: `district` (DM) sees only its own district; `region` (region-level roles, e.g. RD/RBE) sees all districts in its region (full access, not read-only); `all` (top sales role) sees all regions; and `self` (rep) sees only itself. Out-of-scope read raises `ScopeError`; results contain zero out-of-scope rows (uses the 2-district seed). Role names are read from the config/enum mapping, not hard-coded.
 - [ ] T017A [P] **(Planned)** Unit tests for **PRP scrubbing** in `tests/unit/test_prp.py` — given a seed containing PRP-flagged HCPs, assert no `prp = true` HCP appears in any data-access read or retriever result for a field user (FR-020); depends on T008A and the T009 PRP amendment
 - [X] T018 [P] Unit tests for the data-access interface + generator in `tests/unit/test_data_access.py` — seeded counts match the required shape; same seed → identical data (repeatability); `synthetic=true`
 - [X] T019 [P] Unit tests for schemas in `tests/unit/test_schemas.py` — every recommendation object requires a non-empty `reason`; assembly guard rejects a missing reason
@@ -90,7 +90,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 **Goal**: Brief section 1 — a ranked list of reps needing attention, each with a visible, data-backed reason.
 
-**Independent Test**: `GET /api/reps` as a DM returns a ranked list scoped to the DM's district where every rep carries a reason (signals + weights + data points); RBD sees both districts.
+**Independent Test**: `GET /api/reps` as a DM returns a ranked list scoped to the DM's district where every rep carries a reason (signals + weights + data points); a region-level role sees both districts.
 
 ### Tests for User Story 1 ⚠️ (write first, ensure they fail)
 
@@ -203,12 +203,18 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 > These depend on API routes that do not exist yet. Add them once the relevant routes
 > are implemented — do not lose track of them.
 
-- **F6** — Read-only API guard test: assert the API exposes only safe/`GET` routes and no
-  write/mutation path exists (FR-011, "the assistant never acts").
+- **F6 — SUPERSEDED** (was: read-only API guard — assert only `GET` routes, no
+  write/mutation path). Superseded because region-level roles now have **write/action
+  access** (e.g., add notes, flag a rep), so write/action paths will exist. The
+  "assistant never acts on its own" rule (FR-011) is unchanged and is still tested via the
+  suggestion-only checks (e.g., T035); replace F6 with per-route authorization tests when
+  write routes are designed.
 - **F7** — Graceful degrade for `GET /api/brief/{rep_id}`: when later sections (US2–US4)
   are not yet wired, the endpoint degrades gracefully instead of failing (US5 independence).
-- **F8** — RBD read-only enforcement test: once any non-`GET` route exists, assert an RBD
-  (`read_only=true`) cannot reach a write/action path (FR-013).
+- **F8 — SUPERSEDED** (was: assert an RBD `read_only=true` cannot reach a write/action
+  path). Superseded by the scope-level model — region-level roles have full access, not
+  read-only. Replace with **scope-level authorization tests** (e.g., a `district`-level DM
+  cannot act outside its district) when write/action routes exist.
 - **C2 (deferred)** — A dedicated performance-validation task for SC-001 / the ≤10s p95 brief-assembly goal is intentionally deferred for the MVP (no perf test task in scope).
 
 ---

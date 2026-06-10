@@ -35,7 +35,7 @@ Follow-up TODOs: none. RATIFICATION_DATE set to project start (2026-06-07).
 
 # Field Intelligence Coach Agent Constitution
 
-An AI-powered agent that helps district managers and regional business directors
+An AI-powered agent that helps district managers and region-level roles
 prepare for coaching conversations and make better business prioritization decisions.
 These principles are non-negotiable. Every spec, plan, task, and review MUST comply.
 
@@ -84,9 +84,13 @@ later is a data-source change, not a security or compliance redesign.
 
 ### V. Role- and Territory-Based Access Control (RBAC)
 
-Users MUST see only what their role and territory permit. A district manager sees
-their own district; a regional business director sees their region. Access decisions
-MUST be enforced at the data-access layer, not merely hidden in the UI.
+Users MUST see only what their role and territory permit. Access is scoped by **level**,
+not job title: **self** (rep), **district** (district manager — own district), **region**
+(region-level roles — whole region), and **all regions** (top sales role). All **non-rep**
+roles have **full access** within their scope (it may take actions — not read-only); roles
+map to a scope level via a single config source. (Exact role names are pending confirmation
+and are configuration only — see `docs/project-status.md`.) Access decisions MUST be
+enforced at the data-access layer, not merely hidden in the UI.
 
 Rationale: Field hierarchies are sensitive. Enforcing scope at the data layer prevents
 both accidental leakage and deliberate over-reach, and keeps the model from ever

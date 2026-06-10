@@ -6,11 +6,16 @@ MVP = the "morning coaching brief" (5 sections). See
 `specs/001-morning-coaching-brief/` for the spec and plan.
 
 ## Golden rules (from the project constitution — never break these)
-- The assistant only SUGGESTS. The human (DM or RBD) always DECIDES. No autonomous actions.
+- The assistant only SUGGESTS. The human (DM or a region-level role) always DECIDES. No autonomous actions.
 - Every recommendation must show its REASON and the data behind it. No hidden logic.
 - SYNTHETIC DATA ONLY. Never create, commit, or read real customer, prescriber, or rep data.
-- Enforce RBAC at the data-access layer (not just the UI): a DM sees their own
-  district; a regional business director (RBD) sees their region, read-only.
+- Enforce RBAC at the data-access layer (not just the UI) by TERRITORY SCOPE LEVEL, not
+  job title: self (rep) / district (DM — own district) / region (region-level roles) /
+  all regions (top sales role). All non-rep roles have FULL access within their scope (not
+  read-only); roles map to a scope level via a single config/enum source. Exact role names
+  are config-only and pending confirmation — see `docs/project-status.md`.
+- PRP scrubbing: HCPs flagged `prp` are removed at the data-access layer before any result
+  reaches a field user (FR-020). Never return a PRP HCP to a field user.
 - The rep prioritization RANKING is deterministic and explainable — computed in code,
   not decided by the LLM. The LLM only turns the structured reason into clear language.
 - Quality must be testable: the 5-section checklist rubric is enforced by automated tests.
@@ -34,6 +39,9 @@ MVP = the "morning coaching brief" (5 sections). See
 ## Conventions
 - All data reads go through the data-access layer. A component never reads a store directly.
 - Each brief recommendation returns a structured `reason` object the UI renders.
+- Metrics are per (account, brand): share, volume, spend, and call activity are attributable
+  to an (account, brand) pair (`AccountBrandMetrics`). Brand names come ONLY from the `Brand`
+  enum (single source of truth) — never hard-code a brand string elsewhere.
 - Keep every MVP choice mapped to a production AWS service (see the plan).
 
 ## Helpful subagents

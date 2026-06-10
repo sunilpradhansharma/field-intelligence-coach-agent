@@ -14,7 +14,7 @@ Region (1) ──< District (2) ──< User (DM, 1 per district)
                      └──< Rep (8–12) ──< Account/HCP (15–30)
                                   │            └──< AccountBrandMetrics (per brand), CallActivity (per brand)
                                   └──< CoachingSession (2–3)
-RBD (User) ── scoped to ──> Region (read-only, all its districts)
+Region-level role (User) ── scoped to ──> Region (full access, all its districts)
 ```
 
 ## Entities
@@ -39,12 +39,16 @@ RBD (User) ── scoped to ──> Region (read-only, all its districts)
 |-------|------|-------|
 | user_id | string (PK) | |
 | name | string | |
-| role | enum {`district_manager`, `regional_business_director`} | drives RBAC |
-| district_id | string (FK→District), nullable | set for DM; null for RBD |
-| region_id | string (FK→Region) | DM's region (via district) or RBD's region |
+| role | enum (config-sourced) | maps to a **scope level**; drives RBAC |
+| scope_level | enum {`self`, `district`, `region`, `all`} | the territory level the role grants |
+| district_id | string (FK→District), nullable | set for a `district`-level user; null otherwise |
+| region_id | string (FK→Region) | the user's region (via district for a DM, or directly) |
 
-- **Rule**: A `district_manager` is scoped to `district_id`. A
-  `regional_business_director` is scoped to `region_id` (all its districts), **read-only**.
+- **Rule**: access is scoped by **level**, not job title: `self` (rep — modeled, no MVP
+  workflow), `district` (DM — own district), `region` (region-level roles — whole region),
+  `all` (top sales role — all regions). All **non-rep** levels have **full access** (NOT
+  read-only); `region` and above also carry action rights. The role-name → `scope_level`
+  mapping comes from a **single config/enum source** (role names are configuration).
 - **Identity/uniqueness**: `user_id` unique. One DM per district in the seed.
 
 ### Rep (Sales Representative) — *HR-sensitive*
@@ -191,7 +195,7 @@ Every recommendation carries one of these.
 | Field | Type | Notes |
 |-------|------|-------|
 | brief_id | string | for audit/trace |
-| generated_for | {user_id, role, scope} | DM (or RBD viewing) + territory scope |
+| generated_for | {user_id, role, scope_level, scope} | DM (or a region-level role viewing) + territory scope |
 | ranked_reps | list<RepRanking> | section 1 (top 3–5) |
 | selected_rep_id | string | the rep the rest of the brief details |
 | coaching_focus | list<CoachingFocus> | section 2 (1–3) |

@@ -16,8 +16,10 @@ Postgres / Athena-S3 and Bedrock Knowledge Bases in production). Rep prioritizat
 (Claude on Amazon Bedrock, model id read from configuration) only renders reason objects
 into clear language and writes the opener; it never decides rankings. Every recommendation
 carries a structured `reason` object (signals, weights, data points) that the UI renders.
-RBAC (DM = own district; RBD = whole region, read-only) is enforced in the data-access
-layer. A FastAPI backend serves the brief to a minimal web page. Quality is proven with
+RBAC is enforced in the data-access layer by **territory scope level** — self (rep),
+district (DM), region (region-level roles), all regions (top sales role); all non-rep roles
+have full access (not read-only), and roles map to a level via a single config/enum source.
+A FastAPI backend serves the brief to a minimal web page. Quality is proven with
 pytest at unit/component/end-to-end levels, including the fixed checklist rubric and
 seeded example-based checks.
 
@@ -76,7 +78,7 @@ data-access scrubbing path (FR-020).
 | II | Always Explain Why | Every component emits a structured `reason` object (signals, weights, data points); UI renders it. Deterministic scorer makes ranking reasons exact. | ✅ |
 | III | Synthetic Data Only (POC) | Seeded synthetic generator; no real connectors. Data labeled synthetic. | ✅ |
 | IV | Privacy & Compliance From Day One | HCP=private (IQVIA/PDRP), rep=HR-sensitive classifications applied to access, display, logging; PII guardrail hook present. | ✅ |
-| V | RBAC | Role+territory enforced inside the data-access layer (not UI-only): DM=own district, RBD=region read-only. Two districts exist to test it. | ✅ |
+| V | RBAC | Role+territory enforced inside the data-access layer (not UI-only) by scope level: self/district/region/all; DM=own district, region-level roles=region (full access, not read-only); roles map to a level via config. Two districts exist to test it. | ✅ |
 | VI | Fair, Not Biased | Ranking is deterministic with fixed, visible weights over four business signals; no protected attributes/proxies; LLM cannot reorder. | ✅ |
 | VII | Built to Grow Into Production | Clean data-access + retrieval + LLM + embeddings interfaces; each MVP choice has a documented AWS production mapping; source swap ≠ rewrite. | ✅ |
 | VIII | One Platform (AWS+Bedrock+Claude) | Claude on Bedrock (model id from config), Titan embeddings, orchestration in code via LangGraph. | ✅ |

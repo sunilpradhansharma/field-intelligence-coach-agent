@@ -85,7 +85,7 @@ Only the data-access layer talks to the stores — the builders never touch a st
 
 1. The District Manager opens the web app and asks for today's coaching brief *(PLANNED UI/API)*.
 2. FastAPI turns the signed-in identity into an `AccessContext` and calls the LangGraph orchestrator *(PLANNED)*.
-3. The orchestrator reads the DM's team data **only through the data-access layer**, which enforces RBAC and returns in-scope data *(seam BUILT; RBAC enforcement PLANNED, T008)*.
+3. The orchestrator reads the DM's team data **only through the data-access layer**, which enforces RBAC, **scrubs any PRP-flagged HCPs**, and returns in-scope data *(seam BUILT; RBAC enforcement PLANNED, T008; PRP scrubbing PLANNED, T008A)*.
 4. The ranking engine scores reps in pure code from fixed, visible weights — **no LLM** — producing ranked reps, each with a structured `Reason` *(PLANNED)*.
 5. For the chosen rep, the five builders gather coaching focus, ride-along prep, accounts/context, and an opener — every item reading through the same seam *(PLANNED)*.
 6. The ride-along prep builder embeds its query with Titan and runs a similarity search in ChromaDB/FAISS, then gets the matching notes back *(PLANNED)*.
@@ -116,17 +116,18 @@ exist but no implementation code yet.
 | Package | Responsibility | Key files | Status |
 |---|---|---|---|
 | `config` | Resolve settings from env: Bedrock model id, region, DB path, seed, fixed ranking weights (model id never hard-coded) | `config/settings.py` | **BUILT** |
-| `schemas` | Pydantic entities, the `Reason` object, recommendation objects, the synthetic `Dataset` | `schemas.py` | **BUILT** |
-| `data_access` | The single read-seam: `DataAccess` + `Retriever` Protocols, `AccessContext`, `ScopeError`; SQLite store impl | `data_access/interface.py`, `data_access/sqlite_store.py` | **BUILT** (interface + store) |
+| `schemas` | Pydantic entities, the `Reason` object, recommendation objects, the synthetic `Dataset`; **+ T007A: `Brand` enum, `Account.prp`, `AccountBrandMetrics`, `CallActivity.brand`** | `schemas.py` | **BUILT** (incl. T007A amendment) |
+| `data_access` | The single read-seam: `DataAccess` + `Retriever` Protocols, `AccessContext`, `ScopeError`; SQLite store impl; **+ T007A: `prp` + brand columns + `account_brand_metrics` table** | `data_access/interface.py`, `data_access/sqlite_store.py` | **BUILT** (interface + store, incl. T007A) |
 | `data_access` (RBAC) | Territory scoping + out-of-scope denial enforced in the data layer | `data_access/rbac.py` *(planned)* | **PLANNED** (T008) |
+| `data_access` (PRP scrub) | Drop HCPs flagged `prp = true` (and their brand-metric / call-activity rows) before any result reaches a field user (FR-020) | (in the data layer, alongside RBAC) *(planned)* | **PLANNED** (T008A) |
 | `data_access` (RAG) | FAISS/Chroma retriever for coaching notes | `data_access/faiss_retriever.py` *(planned)* | **PLANNED** (T011) |
-| `synthetic` | Seeded synthetic data generator + CLI (`python -m coach.synthetic.generate`) | `synthetic/generate.py` | **BUILT** |
+| `synthetic` | Seeded synthetic data generator + CLI (`python -m coach.synthetic.generate`); **+ T009 amendment: flags ~5–10% of HCPs as PRP (≥1 guaranteed), per-(account, brand) metrics + call activity across the five brands** | `synthetic/generate.py` | **BUILT** (incl. T009 amendment) |
 | `llm` | Bedrock Claude wrapper (narration, opener) + Titan embeddings; model id from config | `llm/client.py`, `llm/embeddings.py` *(planned)* | **PLANNED** (T012, T010) |
 | `guardrails` | PII guardrail seam (pass-through in MVP → Bedrock Guardrails) | `guardrails/pii.py` *(planned)* | **PLANNED** (T013) |
 | `components` | The 5 brief builders + the separate LLM narration step | `components/prioritization.py`, `narrate.py`, `coaching_focus.py`, `ride_along_prep.py`, `accounts_context.py`, `opener.py` *(planned)* | **PLANNED** (T023–T037) |
 | `orchestrator` | LangGraph DAG + brief assembly (rejects any recommendation lacking a reason) | `orchestrator/graph.py`, `orchestrator/brief.py` *(planned)* | **PLANNED** (T015) |
 | `observability` | Per-brief / per-LLM audit records; field-level data classification; no out-of-scope data or raw PII in logs | `observability/audit.py` *(planned)* | **PLANNED** (T014) |
-| `api` | FastAPI app; simulated identity → `AccessContext`; read-only brief endpoints | `api/app.py` *(planned)* | **PLANNED** (T016, T025, T037) |
+| `api` | FastAPI app; simulated identity → `AccessContext`; read-only brief endpoints in the MVP (write/action paths for the full-access region role are a later concern — see the F6/F8 reconsideration in `docs/project-status.md`) | `api/app.py` *(planned)* | **PLANNED** (T016, T025, T037) |
 
 Placeholder packages today (only `__init__.py`): `llm`, `guardrails`, `components`,
 `orchestrator`, `observability`, `api`.
@@ -144,15 +145,19 @@ depends on; concrete stores live behind it.
 - **`Retriever` (Protocol)** — coaching-notes RAG: `search_notes(ctx, rep_id, query, k)`.
   Interface defined; the FAISS/Chroma implementation is **PLANNED** (T011).
 - **`AccessContext` (frozen dataclass)** — the caller's identity and scope:
-  `user_id`, `role`, `region_id`, `district_id` (set for a DM, `None` for an RBD),
-  `read_only` (`True` for an RBD). **BUILT.**
+  `user_id`, `role`, `region_id`, `district_id` (set for a DM, `None` for the region-level
+  role), and a legacy `read_only` flag (defaults `False`). **BUILT.** Note: `read_only`
+  predates the confirmation that the region-level role has **full access**; it will be
+  revisited with the role model (T008) and must NOT be read as "the region role is
+  read-only by design."
 - **`ScopeError`** — raised when a read is outside the caller's territory. Defined now;
   **raising/enforcement is PLANNED** (T008).
 
 **RBAC is enforced HERE — at the data layer, not the UI.** Reads are scoped by territory:
-a DM sees only their own district; an RBD sees all districts in their region (read-only).
-In production the *same* interface sits in front of real connectors (Aurora/Athena,
-Bedrock Knowledge Bases), so callers do not change.
+a DM sees only their own district; the region-level role sees all districts in their region
+with **full access** (it can take actions — not read-only; exact role names RD/RBE pending,
+see `docs/project-status.md`). In production the *same* interface sits in front of real
+connectors (Aurora/Athena, Bedrock Knowledge Bases), so callers do not change.
 
 **Current status / honest gaps:** the interface and the SQLite store are built and tested.
 `SqliteStore._allowed_district_ids` already partitions `get_reps` by territory, but the
@@ -175,7 +180,8 @@ erDiagram
     REP ||--o{ ACCOUNT : covers
     REP ||--o{ CALL_ACTIVITY : logs
     REP ||--o{ COACHING_SESSION : has
-    ACCOUNT ||--o{ CALL_ACTIVITY : "called on"
+    ACCOUNT ||--o{ ACCOUNT_BRAND_METRICS : "per (account, brand)"
+    ACCOUNT ||--o{ CALL_ACTIVITY : "called on (per brand)"
 
     REGION {
         string region_id PK
@@ -211,11 +217,24 @@ erDiagram
         enum   performance "under/on/over"
         enum   opportunity_level "low/med/high"
         bool   risk_flag
+        bool   prp "prescriber data restriction; scrubbed at data layer (FR-020)"
+    }
+    ACCOUNT_BRAND_METRICS {
+        string account_id FK "part of composite key"
+        enum   brand "Brand enum; part of composite key"
+        float  market_share
+        float  share_trend "signed; negative = declining"
+        float  volume
+        float  spend
+        enum   performance "under/on/over"
+        enum   opportunity_level "low/med/high"
+        bool   risk_flag
     }
     CALL_ACTIVITY {
         string activity_id PK
         string rep_id FK
         string account_id FK
+        enum   brand "Brand enum; call activity is per (account, brand)"
         string period
         int    calls
         float  calls_trend "signed recent change"
@@ -233,6 +252,18 @@ erDiagram
 
 `BusinessMetric` is a derived per-account view (`account_id`, `market_share`,
 `share_trend`, `volume`, `spend`, `performance`) returned by `get_business_metrics`.
+
+**Brand + PRP + per-brand metrics (BUILT — T007A amendment).** Performance is attributable
+to an **(account, brand)** pair: `AccountBrandMetrics` (composite key `account_id` + `brand`)
+holds `market_share`, `share_trend`, `volume`, `spend`, `performance`, `opportunity_level`,
+`risk_flag` per brand, and `CallActivity` carries a `brand`. One account can carry metrics
+across multiple of the five brands. The five brand names live in **one** place — the
+`Brand` enum in `schemas.py` (the single source of truth; no brand string literal exists
+elsewhere in `src/`). `Account.prp` is a boolean prescriber-data-restriction flag: the data
+is present now, but **scrubbing PRP-flagged HCPs is PLANNED at the data-access layer**
+(T008A, FR-020) — see Section 10. The `Account`-level metric fields and
+`get_business_metrics` are retained for now; migrating that read and `AccountFocus` to
+per-brand output is **PLANNED** (T033).
 
 **Explainability objects.** `Reason` carries `summary` (non-empty), `signals`
 (`SignalContribution`: signal, `raw_value`, `weight`, `contribution`), and `data_points`
@@ -258,6 +289,9 @@ per-node wiring tasks). The planned design:
   rejects any section whose recommendation lacks a non-empty reason.
 - **Separation rule** — `prioritize` computes ranks/scores in code; the separate `narrate`
   node may change only `reason.summary` text, never ranks or scores.
+- **Per-brand accounts/context** — the `accounts_context` builder reads per-(account, brand)
+  rows and produces **one `AccountFocus` per (account, brand)**, labeled by brand, with the
+  behavior-vs-opportunity mismatch evaluated per (account, brand) *(PLANNED, T033)*.
 
 ```mermaid
 flowchart TD
@@ -285,6 +319,10 @@ T020, T021, T022a).
 - **Fixed, visible weights** from `config.settings` (`COACH_WEIGHT_*`, default 0.25 each),
   applied to four signals: **declining share**, **low call activity in key accounts**,
   **missed coaching follow-up**, **opportunity/risk**.
+- **Per-(account, brand) rollup** — the *declining share* and *low call activity* signals
+  read per-(account, brand) rows (`AccountBrandMetrics` / `CallActivity`) and **roll up to a
+  single per-rep value** by aggregating across all of the rep's (account, brand) rows before
+  weighting. The rollup is deterministic so the golden fixture (T021) stays stable.
 - **Output** — `list[RepRanking]` sorted by `total_score`, each carrying a structured
   `Reason` (the `SignalContribution`s with raw value, weight, and contribution, plus the
   `DataPoint`s used). A stable, documented tie-break keeps ordering deterministic.
@@ -344,7 +382,13 @@ levels:
 ## 10. Security, privacy, guardrails
 
 - **RBAC at the data layer** — scope enforced in `data_access`, not the UI (Section 3).
-  Built for `get_reps`; full enforcement + denial is **PLANNED** (T008/T017).
+  Built for `get_reps`; full enforcement + denial is **PLANNED** (T008/T017). The
+  region-level role has **full access** (can take actions), not read-only; exact role names
+  (RD, RBE) are pending confirmation — see `docs/project-status.md`.
+- **PRP scrubbing (PLANNED, T008A)** — HCPs flagged `prp = true` are removed at the
+  data-access layer (along with their `account_brand_metrics` and `call_activity` rows)
+  before any result reaches a field user (FR-020). The `prp` flag is modeled now; scrubbing
+  is the next phase.
 - **Field-level data classification (PLANNED, T014)** — rep fields = HR-sensitive; HCP
   fields = private (IQVIA/PDRP). The audit logger uses this to know which fields must never
   be emitted (FR-016).
@@ -365,7 +409,8 @@ levels:
 pytest, organized as a pyramid under `tests/`.
 
 - **Unit (BUILT today):** `tests/unit/test_data_access.py` and
-  `tests/unit/test_schemas.py`. **17 tests pass** (Phase 1).
+  `tests/unit/test_schemas.py`. **22 tests pass** (Phase 1, incl. the PRP + per-brand
+  assertions added by the T007A/T009 amendment).
 - **Unit (PLANNED):** deterministic scorer (T020), RBAC (T017), fairness (T022a).
 - **Component (PLANNED):** one per builder against seeded data (T021, T022, T026, T029,
   T032, T035), including the golden/anti-LLM-ranking guard (T021).
@@ -407,4 +452,5 @@ Each MVP piece is built to swap for a managed AWS service behind the same interf
 
 ---
 
-*Last verified against the repo at Phase 1 (foundation complete; 17 unit tests passing).*
+*Last verified against the repo at Phase 1 (foundation complete, incl. the PRP + brand
+amendment; 22 unit tests passing).*

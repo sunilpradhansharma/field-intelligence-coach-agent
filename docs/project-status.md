@@ -112,6 +112,17 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 - **Terminology** — **AEBAT** is a tool/website that shows strategic spend and
   speaker-program spend by rep (it is **not** a team). **APEX** is the internal analytics
   support team (a support team / secondary user, **not** a data source).
+- **Role & access model (scope levels)** — access is scoped by **level**, not by job
+  title. The code scopes by level; the role-name → level mapping comes from a single
+  config/enum source. All **non-rep** roles have **full access (no read-only)**:
+  - **Rep → self only** (limited; role modeled, **no MVP workflow**).
+  - **DM → own district** (full within the district).
+  - **RD → whole region** (full).
+  - **RBE → whole region** (full + action rights).
+  - **Head of Sales → all regions** (full).
+
+  The MVP's first workflow remains the **DM opening the brief + the coaching close**; the
+  other roles get **access rules only — no dedicated screens** in the MVP.
 
 ---
 
@@ -120,8 +131,8 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 - **Access** — a DM sees **only their own district**. Account overlaps between DMs happen
   but are rare exceptions and are **out of scope for the MVP**.
 - **Region-level role has FULL access** — it can take actions (e.g., add notes, flag a
-  rep). It is **NOT read-only**. *(This supersedes the earlier "read-only" wording — see
-  Open items.)*
+  rep). It is **NOT read-only**. *(Now captured as the decided scope-level model in §3;
+  this supersedes the earlier "read-only" wording.)*
 - **Hierarchy** — Rep → DM → **RD (Regional Director)** → Head of Sales. There is also an
   **"RBE"** who reports **directly to the Head of Sales**, has full access, and supports
   the Head of Sales and the DMs. **DMs do NOT report to the RBE.**
@@ -144,18 +155,22 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 
 ## 5. Open items — OPEN (pending)
 
-- **Confirm the role model before Phase 2.** Clarify what **RD** and **RBE** stand for,
-  how the original **"RBD"** term in the spec/plan maps to RD/RBE, each role's exact
-  scope, and the **Head of Sales** access level. *Why it matters / blocks:* **BLOCKS
-  Phase 2 (RBAC)** — we cannot enforce territory/role access without the final model.
+- **Confirm "RBE" expansion (terminology only).** Working definition: a **regional
+  business support role reporting to the Head of Sales**, with region scope + action
+  rights. *Does NOT block Phase 2* — role names are config; the scope level is decided (§3).
+- **Confirm "RD" = the role earlier mislabeled "RBD" (terminology only).** *Does NOT block
+  Phase 2* for the same reason — only the label is open, not the region/full-access level.
 - **Confirm the "Litella" brand spelling** before the `Brand` enum value and the **T021**
   golden fixture are frozen. *Blocks:* freezing the enum and any committed golden data.
-- **Region-level role has full (write) access** — this means the deferred read-only API
-  guard tests **F6 / F8** must be reconsidered, because write/action paths will now exist.
-- **Doc-sync needed** — `CLAUDE.md` (line 13) and the spec/plan (**FR-013**) describe the
-  region role (RBD) as **read-only**; this is **now superseded** by Nisha's "full access"
-  answer. The constitution (Principle V) describes RBD region scope; update the wording
-  consistently when the role model is confirmed.
+- **F6 / F8 superseded** — because region-level roles now have full **write/action**
+  access, the old read-only API guard tests are recorded as **SUPERSEDED** in `tasks.md`
+  (replace with per-route / scope-level authorization tests when write routes are designed).
+- **Doc-sync — DONE.** The scope-level / full-access model is now reflected across all
+  docs: `README.md`, `CLAUDE.md`, `docs/`, the constitution (Principle V + preamble), and
+  the full spec-kit set (`spec.md` FR-013, `plan.md` Constitution Check row V,
+  `data-model.md`, `tasks.md` T008/T017/F6/F8, `research.md`, `quickstart.md`,
+  `contracts/data-access.md`, `contracts/api.md`). No region "read-only" wording remains
+  except the intentional F6/F8 SUPERSEDED history.
 - **Spec the CLOSE capture capability** — a new spec, later (separate from the OPEN MVP).
 - **Schedule the coaching workshop** (~60 min, a few DMs + RDs) — it will inform the
   coaching-focus logic and the CLOSE structure.
@@ -171,7 +186,7 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** (22 tests pass) |
-| **Phase 2** | **RBAC** (T008) + **PRP scrubbing enforcement** (T008A) at the data-access layer | **PLANNED — blocked** on role-model confirmation |
+| **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer | **PLANNED — unblocked** (scope-level model decided; only role-name terminology is open and non-blocking) |
 | **Phase 3** | **Deterministic ranking** (T023) + LLM reason narration (T024) | Planned |
 | **Phase 4** | The **5 brief sections** (prioritization, coaching focus, ride-along prep, accounts/context, opener) | Planned |
 | **Phase 5** | **Assembly + rubric + API** (orchestrator, 5-section checklist rubric test, FastAPI endpoints) | Planned |
@@ -189,6 +204,8 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 4. Skim **`src/coach/`** for the built foundation code, and run `uv run pytest -q` to
    confirm the suite is green.
 
-**Immediate next action:** get Nisha's **role-model answers** (RD / RBE / Head of Sales
-scope and how "RBD" maps), update the spec/plan/CLAUDE.md wording (region role is **full
-access**, not read-only), then build **Phase 2 (RBAC + PRP scrubbing enforcement)**.
+**Immediate next action:** build **Phase 2 (RBAC scope levels + PRP scrubbing
+enforcement)** — the scope-level access model is decided (§3) and no longer blocks it. The
+spec/plan/data-model/tasks and constitution/CLAUDE.md have been updated to the scope-level
+model; only the role-name terminology (RBE expansion, RD ← "RBD") remains open and is
+non-blocking because role names are config.

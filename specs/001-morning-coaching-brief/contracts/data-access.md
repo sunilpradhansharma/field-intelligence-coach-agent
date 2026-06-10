@@ -10,14 +10,23 @@ concrete store. RBAC is enforced **here** (Principle V).
 @dataclass(frozen=True)
 class AccessContext:
     user_id: str
-    role: Literal["district_manager", "regional_business_director"]
-    district_id: str | None   # set for DM
-    region_id: str            # always set
-    read_only: bool           # True for RBD
+    role: str                                          # role NAME (from config; maps to a scope_level)
+    scope_level: Literal["self", "district", "region", "all"]
+    district_id: str | None                            # set for a district-level user (a DM)
+    region_id: str                                     # the user's region ("all" spans all regions)
 ```
 
-- The store is constructed/called with an `AccessContext`. All reads filter to it:
-  DM → `district_id`; RBD → all districts in `region_id`. Out-of-scope rows are excluded.
+- Access is scoped by **level**, not job title: `self` (rep — modeled, no MVP workflow),
+  `district` (DM — own district), `region` (region-level roles, e.g. RD/RBE — whole region),
+  `all` (top sales role — all regions). All **non-rep** levels have **full access (including
+  actions)**, not read-only. The **role-name → `scope_level` mapping comes from a single
+  config source** (role names are configuration, not hard-coded logic).
+- The store is constructed/called with an `AccessContext`. All reads filter to the caller's
+  `scope_level`: `district` → `district_id`; `region` → all districts in `region_id`; `all`
+  → all regions; `self` → own rep. Out-of-scope rows are excluded (not merely hidden in the
+  UI), and an out-of-scope read raises `ScopeError`.
+- *(The earlier `read_only` flag is being retired with the scope-level model in T008 — no
+  non-rep role is read-only.)*
 
 ## DataAccess (structured reads)
 
@@ -34,9 +43,13 @@ class DataAccess(Protocol):
 - **MVP impl**: `SqliteDataAccess` (SQLite/DuckDB over seeded synthetic data).
 - **Prod impl**: `AuroraDataAccess` / `AthenaDataAccess` — same Protocol.
 - **Contract guarantees**:
-  - Never returns rows outside `ctx` scope (unit-tested with the 2-district seed).
+  - Never returns rows outside the caller's `scope_level` (unit-tested with the 2-district seed).
   - `get_rep` / `get_*` for an out-of-scope `rep_id` raise `ScopeError` (→ API `403`).
-  - Read-only: no write methods exist on this interface (Principle I).
+  - **PRP scrubbing**: HCPs flagged `prp = true` (and their dependent brand-metric /
+    call-activity rows) are removed before any result is returned, so no PRP HCP ever
+    reaches a field user (FR-020).
+  - This interface exposes **reads only** — no write/mutation methods (Principle I); any
+    future write/action paths for non-rep roles live outside this read seam.
 
 ## Retriever (coaching-notes RAG)
 

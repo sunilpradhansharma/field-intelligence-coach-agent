@@ -50,8 +50,8 @@ uvicorn coach.api.app:app --reload      # FastAPI backend
 ### Scenario B — RBAC enforcement (Principle V)
 1. As DM of District 1, request a District 2 rep: `GET /api/brief/{d2_rep_id}`.
 2. **Expect**: `403`; no D2 data in the response body.
-3. As the RBD (`X-User-Id: rbd_r1`): `GET /api/reps` returns reps from **both** D1 and D2
-   (region read-only); attempting any write/action is rejected.
+3. As a region-level role (`X-User-Id: region_r1`): `GET /api/reps` returns reps from
+   **both** D1 and D2 (whole-region scope, full access including actions — not read-only).
 4. **Expect**: zero out-of-scope rows in any DM response (SC-003).
 
 ### Scenario C — Empty / sparse states (FR-018)

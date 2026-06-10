@@ -8,7 +8,9 @@ assistant never acts). Every response is RBAC-scoped to the caller's `AccessCont
 ## Identity (MVP-simulated → Cognito in prod)
 
 - Caller identity is supplied via header `X-User-Id: <user_id>` (MVP stub). The server
-  resolves it to an `AccessContext` `{user_id, role, district_id?, region_id}`.
+  resolves it to an `AccessContext` `{user_id, role, scope_level, district_id?, region_id}`
+  (`scope_level` ∈ `self`/`district`/`region`/`all`; the role-name → scope_level mapping
+  comes from config).
 - Missing/unknown user → `401`. Out-of-scope target → `403` (nothing out-of-scope is
   returned).
 
@@ -17,7 +19,7 @@ assistant never acts). Every response is RBAC-scoped to the caller's `AccessCont
 ### `GET /api/whoami`
 Returns the resolved access context (for the UI to show role/territory).
 ```json
-{ "user_id": "dm_d1", "role": "district_manager", "district_id": "D1", "region_id": "R1" }
+{ "user_id": "dm_d1", "role": "district_manager", "scope_level": "district", "district_id": "D1", "region_id": "R1" }
 ```
 
 ### `GET /api/reps`
@@ -27,7 +29,7 @@ Ranked list of reps needing attention (brief section 1), scoped to the caller.
 ```json
 {
   "synthetic": true,
-  "scope": { "role": "district_manager", "district_id": "D1" },
+  "scope": { "role": "district_manager", "scope_level": "district", "district_id": "D1" },
   "ranked_reps": [
     {
       "rep_id": "rep_007",
@@ -59,7 +61,7 @@ Full coaching brief for one rep (sections 2–5 plus the rep's ranking from sect
 {
   "brief_id": "brief_2026-06-07_rep_007",
   "synthetic": true,
-  "generated_for": { "user_id": "dm_d1", "role": "district_manager", "scope": "D1" },
+  "generated_for": { "user_id": "dm_d1", "role": "district_manager", "scope_level": "district", "scope": "D1" },
   "selected_rep_id": "rep_007",
   "ranked_reps": [ "...section 1 (as above)..." ],
   "coaching_focus": [
