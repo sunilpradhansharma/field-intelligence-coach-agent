@@ -26,8 +26,9 @@ synthetic.
 ## 2. Current status — BUILT (in the repo now)
 
 **Phase 1 Foundation (incl. the PRP + per-brand amendment), Phase 2 (RBAC + PRP
-enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested.** `pytest` →
-**45 passed**.
+enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested. Phase 4 (the
+brief sections) is IN PROGRESS — section 1 of 4 (coaching focus) is done.** `pytest` →
+**51 passed**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -115,6 +116,39 @@ enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested.** `py
   lazy; tests inject a fake LLM (no live Bedrock calls). Until narrated, `summary` holds the
   `PENDING_SUMMARY` placeholder (see Phase 5 requirement in §5).
 
+### Phase 4 (IN PROGRESS) — brief sections, built one at a time
+**Section 1 of 4 — coaching focus (FR-005) — tasks T026, T027 — DONE.**
+- **Deterministic focus selection** (`src/coach/components/coaching_focus.py`): the focus
+  areas are decided in **pure code**, not by the LLM. A signal triggers a focus when its raw
+  value clears a **config-visible trigger threshold** (`Settings.focus_thresholds`); the
+  focus wording comes from a **config-visible catalog** (`Settings.focus_catalog`). The top
+  1–3 are returned, ordered by **strength** (the **normalized 0..1** value, same basis as
+  ranking — ADR 0001) then the fixed signal order (deterministic tie-break).
+- **Structured reasons with real data** (FR-010): each `CoachingFocus` carries the triggering
+  `SignalContribution` (raw + normalized) plus real data points — the per-(account, brand)
+  rows or coaching sessions behind it (keyed on the Brand enum name).
+- **Edge cases, no fabrication** (FR-018): a rep with no signal above threshold gets a single
+  low-priority **default focus** with a clear note; a **no-history** rep is handled gracefully
+  (missed-follow-up can't trigger; the default note states "no prior coaching history yet").
+- **LLM limited to wording**: `narrate_focus` (`src/coach/llm/narrate.py`) rebuilds via
+  `model_copy` so only `reason.summary` changes — `focus_area`, signals, and data points are
+  preserved by construction (anti-LLM guard test verifies it). Model id from config; fake LLM
+  in tests.
+
+**Shared rollup refactor** (`src/coach/components/signals.py`): the per-rep signal
+computation was extracted into one place. **Ranking and coaching focus now share the same
+rollup**, so their signal numbers can never drift apart. Ranking output was verified
+**unchanged** (the T021 golden fixture is the guard and is green).
+
+**Remaining Phase 4 sections (planned):**
+1. ✅ Coaching focus — done.
+2. **Ride-along prep** — prior notes, agreed actions, observe-next; brings in the **notes
+   retriever / RAG** (T010 embeddings + T011 FAISS/Chroma retriever, both RBAC-scoped +
+   PRP-aware) — tasks T029–T031.
+3. **Accounts + per-brand business context** — key accounts with context and mismatch flags;
+   first place **brand names are surfaced** to the DM (FR-007) — tasks T032–T034.
+4. **Opener** — a short suggested opener from the assembled context — tasks T035–T037.
+
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
   (same seed → identical data), synthetic-only provenance, store round-trip, plus the
@@ -136,10 +170,16 @@ enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested.** `py
 - `tests/unit/test_ranking_golden.py` (**T021**) — seed-42 / District-1 golden: ranked
   order, scores, and reason structure (raw + normalized) match the committed fixture, keyed
   on Brand enum names (independent of the display spelling).
-- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, and 3 all
-  **COMPLIANT** (Principle V scope levels; Principle IV PRP scrubbing; Principles I/VI
-  deterministic, LLM-out-of-ranking, config-controlled influence, reason shows raw data);
-  no golden-rule violations.
+- `tests/component/test_coaching_focus.py` (**T026**) — example-based focus selection (seed
+  42) and order; changing a config threshold shifts the selection predictably; every
+  `CoachingFocus` has a structured reason with ≥1 data point (FR-010); the no-signal default
+  and no-history cases (FR-018); plus the **anti-LLM guard** (narration changes only
+  `reason.summary`).
+- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, and the Phase 4
+  coaching-focus section all **COMPLIANT** (Principle V scope levels; Principle IV PRP
+  scrubbing; Principles I/VI deterministic + LLM-out-of-deciding + config-controlled +
+  reason shows raw data; the signals.py refactor verified output-preserving); no golden-rule
+  violations.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -234,6 +274,12 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   Phase 2* for the same reason — only the label is open, not the region/full-access level.
 - **Confirm the "Litella" brand spelling** before the `Brand` enum value and the **T021**
   golden fixture are frozen. *Blocks:* freezing the enum and any committed golden data.
+- **Tune scoring/selection parameters with the business (Nisha).** The **coaching-focus
+  trigger thresholds** (`Settings.focus_thresholds`, default 0.5 / 1 / 1 / 1) and the
+  **ranking normalization caps** (`Settings.ranking_norm_caps`, default 3.0 / 10 / 3 / 10 —
+  ADR 0001) are config-visible product judgments. Review/tune them once Nisha sees real
+  output. When changed, the T021 golden and the coaching-focus example fixture must be
+  regenerated together (they move in lockstep).
 - **F6 / F8 superseded** — because region-level roles now have full **write/action**
   access, the old read-only API guard tests are recorded as **SUPERSEDED** in `tasks.md`
   (replace with per-route / scope-level authorization tests when write routes are designed).
@@ -271,8 +317,8 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 |-------|-------|--------|
 | **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** |
 | **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** |
-| **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** (45 tests pass) |
-| **Phase 4** | The remaining **brief sections, built one at a time** (coaching focus, ride-along prep, accounts/context, opener) — section 1 (ranking) is done | **PLANNED (next)** |
+| **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** |
+| **Phase 4** | The **brief sections, built one at a time**: (1) **coaching focus** ✅ T026/T027; (2) ride-along prep + notes retriever; (3) accounts + per-brand context; (4) opener | **IN PROGRESS** (1 of 4 done; 51 tests pass) |
 | **Phase 5** | **Assembly + rubric + API** (orchestrator, 5-section checklist rubric test, FastAPI endpoints) | Planned |
 | **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) | Planned |
 | **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
@@ -285,16 +331,19 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 2. Then read **`specs/001-morning-coaching-brief/`** — `spec.md`, `plan.md`,
    `data-model.md`, `tasks.md` — for the detailed requirements and task IDs.
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
-4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking code, and run
-   `uv run pytest -q` to confirm the suite is green (**45 passing**).
+4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + coaching-focus code,
+   and run `uv run pytest -q` to confirm the suite is green (**51 passing**).
 
-**Immediate next action:** build **Phase 4 (the remaining brief sections, one at a time)** —
-coaching focus (T026–T028), ride-along prep (T029–T031, RAG over notes — needs the retriever
-T010/T011), accounts/context (T032–T034, per-(account, brand), reusing
-`get_account_brand_metrics`), and the opener (T035–T037). Section 1 (ranking) is already done.
-Each section is a build + test increment.
+**Immediate next action:** build **Phase 4 section 2 — ride-along prep + the notes retriever**
+(tasks **T010** Bedrock/Titan embeddings, **T011** FAISS/Chroma retriever — both RBAC-scoped +
+PRP-aware, reusing the `prp_account_ids` hook — then **T029–T031** the `ride_along_prep`
+component: last notes, agreed actions, observe-next, with an explicit empty-state for a
+no-history rep, FR-018). Follow the coaching-focus pattern: deterministic code decides what to
+surface; the LLM only phrases. Section 1 (coaching focus) is done; sections 3 (accounts +
+per-brand context) and 4 (opener) follow.
 
-**Still open before fixtures are frozen:** the **"Litella" brand spelling** (the T021 golden
-already avoids the display spelling by keying on Brand enum names, but confirm it before the
-enum value is finalized). When the **API/orchestrator** lands (Phase 5), enforce
+**Still open before fixtures are frozen:** the **"Litella" brand spelling** (the T021 golden +
+coaching-focus fixture both avoid the display spelling by keying on Brand enum names, but
+confirm it before the enum value is finalized) and **tuning the focus thresholds / ranking
+caps with Nisha** (see §5). When the **API/orchestrator** lands (Phase 5), enforce
 narrate-before-expose (see §5) so no `PENDING_SUMMARY` placeholder reaches a user.
