@@ -27,8 +27,8 @@ synthetic.
 
 **Phase 1 Foundation (incl. the PRP + per-brand amendment), Phase 2 (RBAC + PRP
 enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested. Phase 4 (the
-brief sections) is IN PROGRESS — section 1 of 4 (coaching focus) is done.** `pytest` →
-**51 passed**.
+brief sections) is IN PROGRESS — section 1 (coaching focus) is done, and section 2's notes
+retriever seam is done.** `pytest` → **62 passed**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -140,14 +140,40 @@ computation was extracted into one place. **Ranking and coaching focus now share
 rollup**, so their signal numbers can never drift apart. Ranking output was verified
 **unchanged** (the T021 golden fixture is the guard and is green).
 
+**Section 2 of 4 — ride-along prep — IN PROGRESS.** Step 2a (the notes retriever **seam**)
+is DONE; Step 2b (the `ride_along_prep` component) is still PLANNED.
+- **Step 2a — notes retriever seam — tasks T010, T011 — DONE.**
+  - **Embeddings behind an interface** (`src/coach/llm/embeddings.py`): an `EmbeddingProvider`
+    Protocol with a **lazy `BedrockEmbeddings`** (Amazon Titan, **model id from config**, boto3
+    imported on first use) and a deterministic **`FakeEmbeddings`** for offline tests.
+  - **Vector store behind an interface** (`src/coach/data_access/vector_store.py`): a
+    `VectorStore` Protocol with an **in-memory cosine store** for the MVP (offline, repeatable;
+    the in-memory option used in tests) → maps to a Chroma / managed backend in production.
+  - **The retriever is part of the single door, not a bypass**
+    (`src/coach/data_access/notes_retriever.py`): `NotesRetriever.search_notes` is the single
+    guarded entry point and enforces the **same RBAC scope + PRP scrubbing as the structured
+    store** — it **reuses the existing helpers** (`rbac.require_rep_in_scope` for scope →
+    `ScopeError` out of scope, and `rbac.prp_account_ids` to drop any note tied to a PRP-flagged
+    account), rather than reimplementing the rules. Each note is tied to the account/HCP it
+    concerns as **index metadata only** (no `CoachingSession` schema change — the existing
+    free-text `notes_text` is indexed, so no seeded note field was added and no count/golden
+    test needed updating). Retrieval is **synthetic-only and seeded/repeatable** (FakeEmbeddings
+    + fixed seed → same notes every run). Rationale: **ADR 0002**.
+- **Step 2b — `ride_along_prep` component (PLANNED)** — consumes this retriever for prior
+  notes, agreed actions, observe-next, with an explicit empty-state for a no-history rep
+  (FR-018) — tasks T029–T031.
+
 **Remaining Phase 4 sections (planned):**
 1. ✅ Coaching focus — done.
-2. **Ride-along prep** — prior notes, agreed actions, observe-next; brings in the **notes
-   retriever / RAG** (T010 embeddings + T011 FAISS/Chroma retriever, both RBAC-scoped +
-   PRP-aware) — tasks T029–T031.
+2. **Ride-along prep** — retriever seam ✅ (T010/T011); the `ride_along_prep` component
+   (T029–T031) is next.
 3. **Accounts + per-brand business context** — key accounts with context and mismatch flags;
    first place **brand names are surfaced** to the DM (FR-007) — tasks T032–T034.
 4. **Opener** — a short suggested opener from the assembled context — tasks T035–T037.
+
+**Production mapping:** local in-memory store + Titan embeddings → **Amazon Bedrock Knowledge
+Bases / OpenSearch** behind the same `EmbeddingProvider` / `VectorStore` / `Retriever`
+interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (ADR 0002).
 
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
@@ -175,11 +201,17 @@ rollup**, so their signal numbers can never drift apart. Ranking output was veri
   `CoachingFocus` has a structured reason with ≥1 data point (FR-010); the no-signal default
   and no-history cases (FR-018); plus the **anti-LLM guard** (narration changes only
   `reason.summary`).
-- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, and the Phase 4
-  coaching-focus section all **COMPLIANT** (Principle V scope levels; Principle IV PRP
-  scrubbing; Principles I/VI deterministic + LLM-out-of-deciding + config-controlled +
-  reason shows raw data; the signals.py refactor verified output-preserving); no golden-rule
-  violations.
+- `tests/component/test_notes_retriever.py` (**T011**) — implements the `Retriever` Protocol;
+  determinism (same query/seed → same notes; two seeded builds agree); **RBAC** (a DM cannot
+  retrieve another district's notes → `ScopeError`; region across its region; `all`
+  everywhere); **PRP** (≥1 PRP-tied note exists; never returned at any scope level; exclusion
+  is selective); and **config/offline** embeddings (model id from config, raises if unset, no
+  boto3 client/live Bedrock call).
+- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, the Phase 4
+  coaching-focus section, **and the notes retriever seam** all **COMPLIANT** (Principle V
+  scope levels; Principle IV PRP scrubbing — the retriever reuses the same helpers and is not
+  a bypass; Principles I/VI deterministic + LLM-out-of-deciding + config-controlled; Principle
+  III synthetic-only; Principle VII behind interfaces); no golden-rule violations.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -219,6 +251,10 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   attributable to an `(account, brand)` pair; one account can carry multiple brands.
 - **PRP rule (FR-020)** — HCPs flagged `prp` must be **scrubbed at the data-access layer**
   before any result reaches a field user (refines the privacy requirement FR-016).
+- **Notes retriever enforces RBAC + PRP at query time (ADR 0002)** — the vector-search path
+  is part of the single door, not a separate trust boundary: it re-applies the same RBAC scope
+  and PRP scrubbing on every query, reusing the existing helpers. See
+  [`docs/adr/0002-notes-retriever-rbac-prp.md`](adr/0002-notes-retriever-rbac-prp.md).
 - **Brand portfolio modeled** — LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid, Litella
   (the **"Litella" spelling is unconfirmed**).
 - **Terminology** — **AEBAT** is a tool/website that shows strategic spend and
@@ -318,7 +354,7 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** |
 | **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** |
 | **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** |
-| **Phase 4** | The **brief sections, built one at a time**: (1) **coaching focus** ✅ T026/T027; (2) ride-along prep + notes retriever; (3) accounts + per-brand context; (4) opener | **IN PROGRESS** (1 of 4 done; 51 tests pass) |
+| **Phase 4** | The **brief sections, built one at a time**: (1) **coaching focus** ✅ T026/T027; (2) ride-along prep — **retriever seam ✅ T010/T011**, `ride_along_prep` component next; (3) accounts + per-brand context; (4) opener | **IN PROGRESS** (§1 done; §2 retriever seam done; 62 tests pass) |
 | **Phase 5** | **Assembly + rubric + API** (orchestrator, 5-section checklist rubric test, FastAPI endpoints) | Planned |
 | **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) | Planned |
 | **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
@@ -331,16 +367,17 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 2. Then read **`specs/001-morning-coaching-brief/`** — `spec.md`, `plan.md`,
    `data-model.md`, `tasks.md` — for the detailed requirements and task IDs.
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
-4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + coaching-focus code,
-   and run `uv run pytest -q` to confirm the suite is green (**51 passing**).
+4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + coaching-focus +
+   notes-retriever code, and run `uv run pytest -q` to confirm the suite is green
+   (**62 passing**).
 
-**Immediate next action:** build **Phase 4 section 2 — ride-along prep + the notes retriever**
-(tasks **T010** Bedrock/Titan embeddings, **T011** FAISS/Chroma retriever — both RBAC-scoped +
-PRP-aware, reusing the `prp_account_ids` hook — then **T029–T031** the `ride_along_prep`
-component: last notes, agreed actions, observe-next, with an explicit empty-state for a
-no-history rep, FR-018). Follow the coaching-focus pattern: deterministic code decides what to
-surface; the LLM only phrases. Section 1 (coaching focus) is done; sections 3 (accounts +
-per-brand context) and 4 (opener) follow.
+**Immediate next action:** build **Phase 4 Step 2b — the `ride_along_prep` component
+(T029–T031)** on top of the retriever seam (which is done, T010/T011). It should use
+`NotesRetriever.search_notes` (already RBAC-scoped + PRP-scrubbed) to surface the selected
+rep's prior notes, agreed actions, and observe-next, with an explicit **empty-state for a
+no-history rep** (FR-018). Follow the coaching-focus pattern: deterministic code decides what
+to surface; the LLM only phrases. Then sections 3 (accounts + per-brand context, T032–T034)
+and 4 (opener, T035–T037) follow.
 
 **Still open before fixtures are frozen:** the **"Litella" brand spelling** (the T021 golden +
 coaching-focus fixture both avoid the display spelling by keying on Brand enum names, but
