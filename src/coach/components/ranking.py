@@ -27,13 +27,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from coach.components.signals import RowSignal, compute_rep_signals, row_data_point
 from coach.config.settings import Settings, get_settings
 from coach.data_access.interface import AccessContext, DataAccess
 from coach.schemas import (
-    AccountBrandMetrics,
     DataPoint,
-    OpportunityLevel,
-    Performance,
     Reason,
     RepRanking,
     SignalContribution,
@@ -62,51 +60,13 @@ class _Scored:
     reason: Reason
 
 
-def _row_contribution(
-    m: AccountBrandMetrics, calls: int, low_call_threshold: int
-) -> tuple[float, bool, bool]:
-    """Per-(account, brand) row: (share_decline_magnitude, is_low_call, is_under_served)."""
-    drop = max(0.0, -m.share_trend)
-    is_high = m.opportunity_level == OpportunityLevel.high
-    is_low_call = is_high and calls <= low_call_threshold
-    is_under_served = (m.risk_flag or is_high) and m.performance == Performance.under
-    return drop, is_low_call, is_under_served
-
-
 def _score_rep(ctx: AccessContext, data: DataAccess, rep_id: str, settings: Settings) -> _Scored:
-    metrics = data.get_account_brand_metrics(ctx, rep_id)
-    calls_by_pair = {(c.account_id, c.brand): c.calls for c in data.get_call_activity(ctx, rep_id)}
-    sessions = data.get_coaching_sessions(ctx, rep_id)
-
-    share_decline = 0.0
-    low_call = 0
-    opp_risk = 0
-    rows: list[tuple[float, AccountBrandMetrics, int]] = []  # (row_score, metrics, calls)
-
-    for m in metrics:
-        calls = calls_by_pair.get((m.account_id, m.brand), 0)
-        drop, is_low_call, is_under_served = _row_contribution(
-            m, calls, settings.low_call_threshold
-        )
-        share_decline += drop
-        low_call += int(is_low_call)
-        opp_risk += int(is_under_served)
-        row_score = drop + float(is_low_call) + float(is_under_served)
-        rows.append((round(row_score, 6), m, calls))
-
-    missed = sum(1 for s in sessions if not s.follow_up_done)
-
-    signal_values = {
-        SignalName.declining_share: round(share_decline, 6),
-        SignalName.low_call_activity: float(low_call),
-        SignalName.missed_follow_up: float(missed),
-        SignalName.opportunity_risk: float(opp_risk),
-    }
+    sig = compute_rep_signals(ctx, data, rep_id, settings)
 
     signals: list[SignalContribution] = []
     total = 0.0
     for name in _SIGNAL_ORDER:
-        raw = signal_values[name]
+        raw = sig.raw[name]
         cap = settings.ranking_norm_caps[name.value]
         normalized = round(min(raw, cap) / cap, 6) if cap > 0 else 0.0
         weight = settings.ranking_weights[name.value]
@@ -125,36 +85,22 @@ def _score_rep(ctx: AccessContext, data: DataAccess, rep_id: str, settings: Sett
     reason = Reason(
         summary=PENDING_SUMMARY,
         signals=signals,
-        data_points=_top_contributor_points(rows, settings.top_contributors),
+        data_points=_top_contributor_points(sig.rows, settings.top_contributors),
     )
     return _Scored(
         rep_id=rep_id,
         total_score=round(total, 6),
-        opportunity_risk_value=signal_values[SignalName.opportunity_risk],
+        opportunity_risk_value=sig.raw[SignalName.opportunity_risk],
         reason=reason,
     )
 
 
-def _top_contributor_points(
-    rows: list[tuple[float, AccountBrandMetrics, int]], top_n: int
-) -> list[DataPoint]:
-    """Top contributing (account, brand) pairs. Keyed on the Brand ENUM NAME (a stable
-    identifier, e.g. `litella`), NOT the display spelling (`m.brand.value`), so the
-    unconfirmed "Litella" display spelling cannot affect the structured reason or fixtures."""
+def _top_contributor_points(rows: list[RowSignal], top_n: int) -> list[DataPoint]:
+    """Top contributing (account, brand) pairs (by row_score). Data points are keyed on the
+    Brand ENUM NAME (stable), not the display spelling, via `row_data_point`."""
     # Deterministic order: highest contribution first, then account_id, then brand name.
-    ordered = sorted(rows, key=lambda t: (-t[0], t[1].account_id, t[1].brand.name))
-    points = [
-        DataPoint(
-            label=(
-                f"{m.account_id}/{m.brand.name}: share_trend={m.share_trend}, "
-                f"opp={m.opportunity_level.value}, calls={calls}, perf={m.performance.value}"
-            ),
-            value=row_score,
-            source="AccountBrandMetrics+CallActivity",
-        )
-        for row_score, m, calls in ordered[:top_n]
-        if row_score > 0
-    ]
+    ordered = sorted(rows, key=lambda r: (-r.row_score, r.metrics.account_id, r.metrics.brand.name))
+    points = [row_data_point(r, r.row_score) for r in ordered[:top_n] if r.row_score > 0]
     if not points:
         # Edge case (no high-need signals / no rows / no history): say so, never fabricate.
         points = [DataPoint(label="no high-need signals for this rep", value=0, source="ranking")]

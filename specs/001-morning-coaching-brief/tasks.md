@@ -117,11 +117,11 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T026 [P] [US2] Component + example-based test in `tests/component/test_coaching_focus.py` — 1–3 focus areas, each with a reason; seeded input → expected focus areas; no-gap edge case handled
+- [X] T026 [P] [US2] Component + example-based test in `tests/component/test_coaching_focus.py` — 1–3 focus areas, each with a reason; seeded input → expected focus areas; threshold change shifts selection predictably; explainability (FR-010); anti-LLM guard; no-gap and no-history edge cases handled (FR-018)
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Implement `coaching_focus` component in `src/coach/components/coaching_focus.py` — deterministic selection of 1–3 focus areas + data-tied `Reason`; LLM only phrases the reason text. Depends on T005, T006, T023
+- [X] T027 [US2] Implement `coaching_focus` component in `src/coach/components/coaching_focus.py` — deterministic selection of 1–3 focus areas from a config catalog + config trigger thresholds (reads signals via the shared `src/coach/components/signals.py`, through the data-access layer); each focus carries a data-tied `Reason`. LLM only phrases the reason text (`narrate_focus` in `src/coach/llm/narrate.py`, model_copy → summary only). Depends on T005, T006, T023
 - [ ] T028 [US2] Wire the `coaching_focus` node into the graph and into the brief (section 2) in `src/coach/orchestrator/graph.py`. Depends on T015, T027
 
 **Checkpoint**: US1 + US2 both independently functional.

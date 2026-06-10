@@ -64,6 +64,33 @@ def _default_norm_caps() -> dict[str, float]:
     }
 
 
+def _default_focus_catalog() -> dict[str, str]:
+    """FIXED catalog: which coaching focus area each signal maps to (T027). Visible + tunable.
+    The deterministic component picks 1-3 of these by signal strength; the LLM only phrases
+    the reason text, it never chooses the focus area."""
+    return {
+        "declining_share": "Defend and regrow share at key accounts",
+        "low_call_activity": "Improve account prioritization and call planning",
+        "missed_follow_up": "Follow through on prior agreed coaching actions",
+        "opportunity_risk": "Pursue new therapy starts / under-served opportunity",
+    }
+
+
+def _default_focus_thresholds() -> dict[str, float]:
+    """Minimum RAW signal value for a focus area to TRIGGER (T027). Visible + env-overridable;
+    never hard-coded in the component body."""
+    return {
+        "declining_share": float(os.getenv("COACH_FOCUS_MIN_DECLINING_SHARE", "0.5")),
+        "low_call_activity": float(os.getenv("COACH_FOCUS_MIN_LOW_CALL_ACTIVITY", "1")),
+        "missed_follow_up": float(os.getenv("COACH_FOCUS_MIN_MISSED_FOLLOW_UP", "1")),
+        "opportunity_risk": float(os.getenv("COACH_FOCUS_MIN_OPPORTUNITY_RISK", "1")),
+    }
+
+
+# Shown when no signal clears its trigger threshold (a low-priority, no-gap default focus).
+DEFAULT_FOCUS_AREA = "No high-priority coaching gap — reinforce current strengths"
+
+
 @dataclass(frozen=True)
 class Settings:
     """Resolved configuration. No secrets are stored here."""
@@ -95,6 +122,14 @@ class Settings:
     # How many top contributing (account, brand) pairs to list in a rep's reason.
     top_contributors: int = field(
         default_factory=lambda: int(os.getenv("COACH_TOP_CONTRIBUTORS", "3"))
+    )
+
+    # Coaching-focus selection (T027): fixed catalog (signal -> focus area), trigger
+    # thresholds (min raw signal value), and how many focus areas to return (1..N).
+    focus_catalog: dict[str, str] = field(default_factory=_default_focus_catalog)
+    focus_thresholds: dict[str, float] = field(default_factory=_default_focus_thresholds)
+    max_focus_areas: int = field(
+        default_factory=lambda: int(os.getenv("COACH_MAX_FOCUS_AREAS", "3"))
     )
 
 
