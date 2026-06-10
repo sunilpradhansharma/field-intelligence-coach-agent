@@ -88,8 +88,8 @@ def compute_rep_signals(
 
 def row_data_point(row: RowSignal, value: float) -> DataPoint:
     """A `DataPoint` for one (account, brand) row. Keyed on the Brand ENUM NAME (stable, e.g.
-    `litella`), NOT the display spelling, so the unconfirmed "Litella" spelling cannot affect
-    the structured reason or any fixture. Shows the real underlying numbers."""
+    `liletta`), NOT the display spelling, so a brand display-spelling change cannot affect the
+    structured reason or any fixture. Shows the real underlying numbers."""
     m = row.metrics
     return DataPoint(
         label=(

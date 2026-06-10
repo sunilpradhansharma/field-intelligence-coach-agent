@@ -3,11 +3,9 @@
 Asserts the ranked order, the scores, and the reason structure match a committed golden.
 
 IMPORTANT: this fixture is keyed on account/rep IDs and the Brand ENUM NAME (e.g.
-`lupron_uro`), NOT on any brand DISPLAY spelling (e.g. "LUPRON URO" / "Litella"). The
-"Litella" display spelling is still unconfirmed, so the scorer's data-point labels use the
-stable enum name and this fixture deliberately never embeds a display spelling — that way an
-unconfirmed/changed display spelling cannot break the golden. REVIEW this fixture once the
-brand display spelling is confirmed.
+`lupron_uro`), NOT on any brand DISPLAY spelling (e.g. "LUPRON URO" / "LILETTA"). The
+scorer's data-point labels use the stable enum name and this fixture deliberately never
+embeds a display spelling — so a brand display-spelling change cannot break the golden.
 """
 
 from coach.components.ranking import PENDING_SUMMARY, rank_reps
@@ -87,8 +85,8 @@ def test_golden_top_rep_signal_values_and_structure():
 
 
 def test_golden_reasons_are_independent_of_brand_display_spelling():
-    # No data-point label may embed a brand DISPLAY spelling (e.g. "LUPRON URO"/"Litella");
-    # labels use the stable enum name. This keeps the golden safe from the unconfirmed spelling.
+    # No data-point label may embed a brand DISPLAY spelling (e.g. "LUPRON URO"/"LILETTA");
+    # labels use the stable enum name. This keeps the golden safe from display-spelling changes.
     display_spellings = {b.value for b in Brand}
     for r in _rank_d1():
         for dp in r.reason.data_points:

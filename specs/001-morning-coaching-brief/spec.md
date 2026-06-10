@@ -319,13 +319,10 @@ suggested opener appears that references the rep's specific situation.
 - A fixed preparedness checklist rubric (covering the five brief sections) will be
   authored to evaluate the SC-004/SC-005 consistency and completeness outcomes.
 - **Brand portfolio (data realism)**: the POC models a five-brand portfolio — LUPRON
-  PEDS, LUPRON URO, LUPRON GYN, Synthroid, and Litella (spelling of "Litella" to be
-  confirmed). Performance data (share, volume, spend, call activity) is attributable to a
-  brand. The brand names MUST live in ONE place (an enum or config value) so they are
-  easy to change later.
-- **OPEN ITEM (brand spelling)**: the brand name "Litella" is UNCONFIRMED and MUST be
-  finalized before the `Brand` enum (T007A) and the T021 golden fixture are frozen —
-  changing it afterward would invalidate the committed enum value and golden data.
+  PEDS, LUPRON URO, LUPRON GYN, Synthroid, and LILETTA (brand spelling finalized).
+  Performance data (share, volume, spend, call activity) is attributable to a brand. The
+  brand names MUST live in ONE place (an enum or config value) so they are easy to change
+  later.
 - **Terminology / external systems (confirmed facts)**: **AEBAT** is the tool/website
   that shows strategic spend and speaker-program spend by rep — it is NOT a team. **APEX**
   is the internal analytics support team (a support team / secondary user) — it is NOT a

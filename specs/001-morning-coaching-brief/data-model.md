@@ -109,7 +109,7 @@ are easy to change later.
 | `LUPRON_URO` | LUPRON URO |
 | `LUPRON_GYN` | LUPRON GYN |
 | `SYNTHROID` | Synthroid |
-| `LITELLA` | Litella (spelling TBC — see spec Assumptions open item) |
+| `LILETTA` | LILETTA |
 
 - **Rule**: Performance data (share, volume, spend, call activity) is attributable to a
   brand in this portfolio via the `(account, brand)` pair. No brand name is hard-coded

@@ -61,16 +61,13 @@ class Brand(StrEnum):
     Performance data (share, volume, spend, call activity) is attributable to a brand
     via the (account, brand) pair (see data-model.md). No brand name may be hard-coded
     anywhere else; draw from this enum.
-
-    NOTE: the spelling of "Litella" is UNCONFIRMED and must be finalized before the
-    `Brand` enum value and the T021 golden fixture are frozen (see spec Assumptions).
     """
 
     lupron_peds = "LUPRON PEDS"
     lupron_uro = "LUPRON URO"
     lupron_gyn = "LUPRON GYN"
     synthroid = "Synthroid"
-    litella = "Litella"  # spelling unconfirmed — see class docstring
+    liletta = "LILETTA"
 
 
 class SignalName(StrEnum):

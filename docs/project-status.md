@@ -255,8 +255,8 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   is part of the single door, not a separate trust boundary: it re-applies the same RBAC scope
   and PRP scrubbing on every query, reusing the existing helpers. See
   [`docs/adr/0002-notes-retriever-rbac-prp.md`](adr/0002-notes-retriever-rbac-prp.md).
-- **Brand portfolio modeled** — LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid, Litella
-  (the **"Litella" spelling is unconfirmed**).
+- **Brand portfolio modeled** — LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid, and
+  **LILETTA** (brand spelling **finalized**; `Brand` enum member `liletta` = "LILETTA").
 - **Terminology** — **AEBAT** is a tool/website that shows strategic spend and
   speaker-program spend by rep (it is **not** a team). **APEX** is the internal analytics
   support team (a support team / secondary user, **not** a data source).
@@ -308,8 +308,6 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   rights. *Does NOT block Phase 2* — role names are config; the scope level is decided (§3).
 - **Confirm "RD" = the role earlier mislabeled "RBD" (terminology only).** *Does NOT block
   Phase 2* for the same reason — only the label is open, not the region/full-access level.
-- **Confirm the "Litella" brand spelling** before the `Brand` enum value and the **T021**
-  golden fixture are frozen. *Blocks:* freezing the enum and any committed golden data.
 - **Tune scoring/selection parameters with the business (Nisha).** The **coaching-focus
   trigger thresholds** (`Settings.focus_thresholds`, default 0.5 / 1 / 1 / 1) and the
   **ranking normalization caps** (`Settings.ranking_norm_caps`, default 3.0 / 10 / 3 / 10 —
@@ -379,8 +377,7 @@ no-history rep** (FR-018). Follow the coaching-focus pattern: deterministic code
 to surface; the LLM only phrases. Then sections 3 (accounts + per-brand context, T032–T034)
 and 4 (opener, T035–T037) follow.
 
-**Still open before fixtures are frozen:** the **"Litella" brand spelling** (the T021 golden +
-coaching-focus fixture both avoid the display spelling by keying on Brand enum names, but
-confirm it before the enum value is finalized) and **tuning the focus thresholds / ranking
-caps with Nisha** (see §5). When the **API/orchestrator** lands (Phase 5), enforce
-narrate-before-expose (see §5) so no `PENDING_SUMMARY` placeholder reaches a user.
+**Still open:** **tuning the focus thresholds / ranking caps with Nisha** (see §5). When the
+**API/orchestrator** lands (Phase 5), enforce narrate-before-expose (see §5) so no
+`PENDING_SUMMARY` placeholder reaches a user. (The brand spelling is now confirmed — LILETTA;
+the golden/fixtures key on Brand enum names so they were unaffected.)

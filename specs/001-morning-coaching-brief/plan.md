@@ -64,7 +64,7 @@ from config.
 **Scale/Scope**: Synthetic: 1 region, 2 districts, 1 DM/district, 8–12 reps/district,
 15–30 accounts-HCPs/rep, 2–3 prior coaching sessions/most reps. Seeded + repeatable.
 Performance data is spread across a five-brand portfolio — LUPRON PEDS, LUPRON URO,
-LUPRON GYN, Synthroid, Litella (spelling TBC) — with brand names held in ONE place (an
+LUPRON GYN, Synthroid, LILETTA — with brand names held in ONE place (an
 enum/config value) so they are easy to change. Some HCPs are flagged PRP to exercise the
 data-access scrubbing path (FR-020).
 

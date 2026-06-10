@@ -479,7 +479,7 @@ straight from `specs/001-morning-coaching-brief/tasks.md`.
 - **PRP (prescriber data restriction):** HCPs flagged PRP are **scrubbed at the
   data-access layer** before any result reaches a field user (modeled now; enforcement in
   Phase 2). The brand portfolio modeled is LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid,
-  and Litella (spelling unconfirmed), held in one `Brand` enum.
+  and LILETTA, held in one `Brand` enum.
 - This is a **commercial system, not GxP** — but it is designed to be governed, secure,
   and auditable from day one.
 - **HCP/prescriber data is treated as private** (IQVIA / PDRP rules) and **rep performance

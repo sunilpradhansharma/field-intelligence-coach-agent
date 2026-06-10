@@ -17,7 +17,7 @@ Shape to produce:
 - PRP flag: mark a realistic minority of HCPs as `prp` (about 5-10%, with at least one
   always present) so the data-access PRP-scrubbing path has data to exercise.
 - Per-(account, brand) metrics: each account carries metrics across some of the five
-  brands (LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid, Litella — from the `Brand`
+  brands (LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid, LILETTA — from the `Brand`
   enum). Spread share, volume, spend, and call activity per brand; call activity carries a
   `brand`. Not every account needs every brand, but the dataset must cover all five.
 
