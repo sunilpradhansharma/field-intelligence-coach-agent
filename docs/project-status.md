@@ -26,10 +26,9 @@ synthetic.
 ## 2. Current status — BUILT (in the repo now)
 
 **Phase 1 Foundation (incl. the PRP + per-brand amendment), Phase 2 (RBAC + PRP
-enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested. Phase 4 (the
-brief sections) is IN PROGRESS — sections 1 (coaching focus), 2 (ride-along prep), and 3
-(accounts + per-brand business context) are done; only section 4 (opener) remains.**
-`pytest` → **83 passed**.
+enforcement), Phase 3 (deterministic ranking), and Phase 4 (all five brief sections —
+ranking, coaching focus, ride-along prep, accounts/business context, opener) are COMPLETE
+and tested.** `pytest` → **89 passed**. Next: Phase 5 (assembly + 5-section rubric + API).
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -208,13 +207,35 @@ and Step 2b (the `ride_along_prep` **component**, T029/T030) are both complete.
 - New/updated schemas: `AccountFocus` now carries `brand` + `AccountBrandContext` (the I1
   per-(account, brand) shape, incl. `calls_trend`); `test_schemas.py` updated to match.
 
-**Remaining Phase 4 sections:**
-1. ✅ Coaching focus — done.
-2. ✅ Ride-along prep — done (retriever seam T010/T011 + component T029/T030).
-3. ✅ Accounts + per-brand business context — done (T032/T033); first section to **surface
-   brand names** to the DM (FR-007).
-4. **Opener** — a short suggested opener from the assembled context — tasks T035–T037 (last
-   section).
+**Section 4 of 4 — opener — tasks T035, T036 — DONE** (`src/coach/components/opener.py`,
+FR-009/FR-010/FR-011/FR-018):
+- **Built FROM the already-computed sections, no new data**: `build_opener` is a **pure
+  function** of the upstream outputs (the rep's **priority reason**, **coaching focus**, and
+  **accounts/mismatch**) — it reads nothing from the store or retriever and introduces no new
+  data.
+- **Talking points selected in code**: an ordered, **config-capped** (`opener_max_points`)
+  set of `TalkingPoint`s — top real coaching focus + the key/mismatched account (labeled by
+  the Brand display name) + the rep's top priority signal. The LLM does **not** choose, add,
+  drop, or reorder them.
+- **Provenance on every point** (FR-010): each `TalkingPoint` records its `source` (priority /
+  coaching_focus / account_mismatch / default) and a `ref` back to the exact input, mirrored
+  in the opener's `reason.data_points`.
+- **LLM phrases the opening line only**: `narrate_opener` rebuilds via `model_copy` so only
+  the opening `text` + `reason.summary` change — the talking points and provenance are
+  preserved by construction, so the LLM **adds no new facts/numbers/brands** (anti-LLM guard
+  verifies it). Suggestion-only — pure data, no action path (FR-011). Model id from config;
+  fake LLM in tests.
+- **Edge case (FR-018)**: a rep with no high-priority signals (default focus, no flagged
+  account, no signals) gets a **positive default opener** (`DEFAULT_OPENER_POINT` from config),
+  never fabricated.
+- New schemas: `Opener` now carries `talking_points`; added `TalkingPoint` + `OpenerSource`.
+
+**Phase 4 (all five brief sections) is COMPLETE:**
+1. ✅ Rep ranking + reason (Phase 3) — who to ride with and why.
+2. ✅ Coaching focus (T026/T027) — what to coach.
+3. ✅ Ride-along prep (T010/T011 + T029/T030) — what happened last time.
+4. ✅ Accounts + per-brand business context (T032/T033) — which accounts matter (brand-labeled).
+5. ✅ Opener (T035/T036) — how to open the conversation.
 
 **Production mapping:** local in-memory store + Titan embeddings → **Amazon Bedrock Knowledge
 Bases / OpenSearch** behind the same `EmbeddingProvider` / `VectorStore` / `Retriever`
@@ -263,13 +284,18 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   reason; well-served not flagged; the config threshold flips it); **RBAC** (`ScopeError`) and
   **PRP** (PRP accounts never appear); explainability (FR-010); the **anti-LLM guard** (only
   `reason.summary` changes); FR-018 edges (no-accounts → empty; missing calls → "not recorded").
-- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, and the Phase 4
-  sections built so far (**coaching focus**, the **notes retriever seam**, the
-  **ride-along-prep component**, and the **accounts/business-context component**) all
-  **COMPLIANT** (Principle V scope levels; Principle IV PRP scrubbing — reused helpers, not a
-  bypass; Principles I/VI deterministic + LLM-out-of-deciding + config-controlled; Principle II
-  provenance/explainable; Principle III synthetic-only; Principle VII behind interfaces); no
-  golden-rule violations.
+- `tests/component/test_opener.py` (**T035**) — deterministic talking-point selection (seed
+  42, expected source/ref order) + config cap; provenance on every point mirrored in the
+  reason (FR-010); suggestion-only data, no action (FR-011); the **anti-LLM guard** (only
+  `text` + `reason.summary` change; no points added); FR-018 no-priority rep → positive
+  default opener, not fabricated.
+- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, and **all four Phase 4
+  brief-section components** (**coaching focus**, the **notes retriever seam** +
+  **ride-along-prep component**, the **accounts/business-context component**, and the
+  **opener**) all **COMPLIANT** (Principle V scope levels; Principle IV PRP scrubbing — reused
+  helpers, not a bypass; Principles I/VI deterministic + LLM-out-of-deciding + config-controlled
+  + LLM adds no facts; Principle II provenance/explainable; Principle III synthetic-only;
+  Principle VII behind interfaces); no golden-rule violations.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -410,8 +436,8 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** |
 | **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** |
 | **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** |
-| **Phase 4** | The **brief sections, built one at a time**: (1) **coaching focus** ✅ T026/T027; (2) **ride-along prep** ✅ (T010/T011 + T029/T030); (3) **accounts + per-brand context** ✅ T032/T033; (4) opener (T035–T037) — next | **IN PROGRESS** (§1–§3 done; 83 tests pass) |
-| **Phase 5** | **Assembly + rubric + API** (orchestrator, 5-section checklist rubric test, FastAPI endpoints) | Planned |
+| **Phase 4** | The **five brief sections**: (1) coaching focus ✅ T026/T027; (2) ride-along prep ✅ (T010/T011 + T029/T030); (3) accounts + per-brand context ✅ T032/T033; (4) opener ✅ T035/T036 | **DONE** (all sections; 89 tests pass) |
+| **Phase 5** | **Assembly + rubric + API** (orchestrator/brief, 5-section checklist rubric test, FastAPI endpoints) | **NEXT** |
 | **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) | Planned |
 | **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
 
@@ -423,20 +449,23 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 2. Then read **`specs/001-morning-coaching-brief/`** — `spec.md`, `plan.md`,
    `data-model.md`, `tasks.md` — for the detailed requirements and task IDs.
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
-4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + coaching-focus +
-   notes-retriever + ride-along-prep + accounts-context code, and run `uv run pytest -q` to
-   confirm the suite is green (**83 passing**).
+4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + the five brief-section
+   components (coaching-focus, notes-retriever, ride-along-prep, accounts-context, opener),
+   and run `uv run pytest -q` to confirm the suite is green (**89 passing**).
 
-**Immediate next action:** build **Phase 4 section 4 — the opener** (tasks **T035–T037**,
-FR-009) — the **last brief section**. The deterministic component should assemble a short
-suggested opener that references the rep's specific situation (built from the other sections'
-already-computed facts); the LLM phrases the opener text only (suggestion-only, never an
-action — FR-011), following the same pattern (`model_copy` → wording field). With all five
-sections done, **Phase 5 (assembly + 5-section rubric + FastAPI)** follows — wiring the
-orchestrator/brief and enforcing **narrate-before-expose** (see §5) so no `PENDING_SUMMARY`
-placeholder reaches a user.
+**Immediate next action:** build **Phase 5 — assembly + rubric + API** (orchestrator/brief
+assembly that wires the five built sections, the **5-section checklist rubric** e2e test, and
+the FastAPI endpoints). All section components are done; Phase 5 composes them into the full
+brief and exposes it.
 
-**Still open:** **tuning the focus thresholds / ranking caps with the business** (see §5). When the
-**API/orchestrator** lands (Phase 5), enforce narrate-before-expose (see §5) so no
-`PENDING_SUMMARY` placeholder reaches a user. (The brand spelling is now confirmed — LILETTA;
-the golden/fixtures key on Brand enum names so they were unaffected.)
+**Two reminders to carry into Phase 5:**
+- **Narrate before expose.** The orchestrator/API MUST run LLM narration on every section
+  output **before** anything reaches a user — **no `PENDING_SUMMARY` (or `PENDING_TEXT` /
+  `PENDING_OPENING`) placeholder should ever be surfaced**. Add a test asserting no response
+  contains a pending placeholder once the API lands.
+- **Tune the config-visible values with the business.** The **ranking normalization caps**
+  (ADR 0001), the **coaching-focus thresholds**, and the **account selection / mismatch rule**
+  are all config-visible product judgments — review/tune them once real output is visible.
+
+(The brand spelling is confirmed — **LILETTA**; the golden/fixtures key on Brand enum names so
+they were unaffected.)
