@@ -181,9 +181,15 @@ class DataPoint(BaseModel):
 
 class SignalContribution(BaseModel):
     signal: SignalName
-    raw_value: float  # normalized 0..1 sub-score
-    weight: float  # fixed, visible weight
-    contribution: float  # raw_value * weight
+    # The raw aggregated value the scorer measured (e.g. summed share-drop magnitude, or a
+    # count of low-call / under-served rows). Shown to the DM so they see real numbers.
+    raw_value: float
+    # `raw_value` mapped to 0..1 via a config-visible normalization basis
+    # (`Settings.ranking_norm_caps`): a count/magnitude at or above its cap = 1.0. This is
+    # the value used in scoring, so the fixed weights alone control relative influence.
+    normalized_value: float
+    weight: float  # fixed, visible weight from config
+    contribution: float  # normalized_value * weight
 
 
 class Reason(BaseModel):

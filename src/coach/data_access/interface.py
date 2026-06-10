@@ -19,6 +19,7 @@ from typing import Protocol, runtime_checkable
 from coach.config.settings import scope_level_for
 from coach.schemas import (
     Account,
+    AccountBrandMetrics,
     BusinessMetric,
     CallActivity,
     CoachingSession,
@@ -62,6 +63,10 @@ class DataAccess(Protocol):
     def get_rep(self, ctx: AccessContext, rep_id: str) -> Rep: ...
 
     def get_accounts(self, ctx: AccessContext, rep_id: str) -> list[Account]: ...
+
+    def get_account_brand_metrics(
+        self, ctx: AccessContext, rep_id: str
+    ) -> list[AccountBrandMetrics]: ...
 
     def get_call_activity(self, ctx: AccessContext, rep_id: str) -> list[CallActivity]: ...
 

@@ -20,6 +20,7 @@ from coach.data_access import rbac
 from coach.data_access.interface import AccessContext, DataAccess
 from coach.schemas import (
     Account,
+    AccountBrandMetrics,
     AccountType,
     Brand,
     BusinessMetric,
@@ -261,11 +262,35 @@ class SqliteStore(DataAccess):
             for a in self.get_accounts(ctx, rep_id)
         ]
 
-    # TODO(T008A): PRP scrub required here — the Phase 4 per-(account, brand) read for
-    # `account_brand_metrics` (FR-007) MUST require_rep_in_scope AND drop rows whose
-    # account_id is a prp=true account (same `account_id NOT IN (SELECT account_id FROM
-    # accounts WHERE prp = 1)` pattern as get_call_activity), so no PRP HCP leaks via
-    # account_brand_metrics. Do not add the read without this scrub.
+    def get_account_brand_metrics(
+        self, ctx: AccessContext, rep_id: str
+    ) -> list[AccountBrandMetrics]:
+        # Per-(account, brand) metrics for a rep. RBAC-scoped + PRP-scrubbed (T008A/FR-020):
+        # the join to `accounts` with `a.prp = 0` drops rows for restricted HCPs before they
+        # are returned, so no PRP HCP leaks via account_brand_metrics. The Phase 4 accounts
+        # component (FR-007) consumes this read; the deterministic scorer (T023) uses it too.
+        rbac.require_rep_in_scope(self._conn, ctx, rep_id)
+        rows = self._conn.execute(
+            "SELECT abm.* FROM account_brand_metrics abm "
+            "JOIN accounts a ON abm.account_id = a.account_id "
+            "WHERE a.rep_id = ? AND a.prp = 0 "
+            "ORDER BY abm.account_id, abm.brand",
+            (rep_id,),
+        ).fetchall()
+        return [
+            AccountBrandMetrics(
+                account_id=r["account_id"],
+                brand=Brand(r["brand"]),
+                market_share=r["market_share"],
+                share_trend=r["share_trend"],
+                volume=r["volume"],
+                spend=r["spend"],
+                performance=Performance(r["performance"]),
+                opportunity_level=OpportunityLevel(r["opportunity_level"]),
+                risk_flag=bool(r["risk_flag"]),
+            )
+            for r in rows
+        ]
 
     def get_coaching_sessions(self, ctx: AccessContext, rep_id: str) -> list[CoachingSession]:
         rbac.require_rep_in_scope(self._conn, ctx, rep_id)

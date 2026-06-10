@@ -42,6 +42,24 @@ def _default_weights() -> dict[str, float]:
     }
 
 
+def _default_norm_caps() -> dict[str, float]:
+    """Per-signal normalization basis: the raw value at (or above) which a signal saturates
+    to 1.0. Each signal's raw aggregate is mapped to 0..1 as `min(raw, cap) / cap` BEFORE its
+    weight is applied, so the weights alone control relative influence (no count-style signal
+    can dominate a fractional one). Visible + env-overridable; never hard-coded in the scorer.
+    """
+    return {
+        # summed magnitude of negative share_trend across the rep's (account, brand) rows
+        "declining_share": float(os.getenv("COACH_NORM_CAP_DECLINING_SHARE", "3.0")),
+        # count of high-opportunity rows with low call activity
+        "low_call_activity": float(os.getenv("COACH_NORM_CAP_LOW_CALL_ACTIVITY", "10")),
+        # count of coaching sessions with a missed follow-up (2–3 sessions/rep)
+        "missed_follow_up": float(os.getenv("COACH_NORM_CAP_MISSED_FOLLOW_UP", "3")),
+        # count of (risk OR high-opportunity) under-served rows
+        "opportunity_risk": float(os.getenv("COACH_NORM_CAP_OPPORTUNITY_RISK", "10")),
+    }
+
+
 @dataclass(frozen=True)
 class Settings:
     """Resolved configuration. No secrets are stored here."""
@@ -59,8 +77,21 @@ class Settings:
     # Seeded synthetic data — fixed seed makes generation repeatable for tests.
     seed: int = field(default_factory=lambda: int(os.getenv("COACH_SEED", "42")))
 
-    # Fixed, visible ranking weights (deterministic scorer in a later phase consumes these).
+    # Fixed, visible ranking weights — the deterministic scorer (T023) consumes these.
     ranking_weights: dict[str, float] = field(default_factory=_default_weights)
+
+    # Per-signal normalization caps (single, visible basis for mapping raw values to 0..1).
+    ranking_norm_caps: dict[str, float] = field(default_factory=_default_norm_caps)
+
+    # Ranking thresholds (visible + config-sourced; never hard-coded in the scorer body).
+    # A high-opportunity (account, brand) row with calls <= this counts as "low call activity".
+    low_call_threshold: int = field(
+        default_factory=lambda: int(os.getenv("COACH_LOW_CALL_THRESHOLD", "2"))
+    )
+    # How many top contributing (account, brand) pairs to list in a rep's reason.
+    top_contributors: int = field(
+        default_factory=lambda: int(os.getenv("COACH_TOP_CONTRIBUTORS", "3"))
+    )
 
 
 def get_settings() -> Settings:
