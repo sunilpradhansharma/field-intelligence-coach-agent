@@ -25,8 +25,8 @@ synthetic.
 
 ## 2. Current status — BUILT (in the repo now)
 
-**Phase 1 Foundation is COMPLETE and tested, including the recent PRP + per-brand
-amendment.** `pytest` → **22 passed**.
+**Phase 1 Foundation (incl. the PRP + per-brand amendment) and Phase 2 (RBAC + PRP
+enforcement) are COMPLETE and tested.** `pytest` → **35 passed**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -51,8 +51,8 @@ amendment.** `pytest` → **22 passed**.
 - **`Brand` enum** (`schemas.py`) — single source of truth for brand names. No brand
   string literals exist anywhere else in the source (confirmed by review).
 - **`prp` flag** — `Account.prp: bool` added to the schema and the `accounts` table.
-  PRP data is *added* here; **scrubbing is deliberately NOT built yet** (that is the next
-  phase, task **T008A**).
+  PRP data was *added* here in Phase 1; **scrubbing is now built in Phase 2** (task
+  **T008A**, see below).
 - **Per-(account, brand) metrics** — new `AccountBrandMetrics` model and
   `account_brand_metrics` table keyed by `(account_id, brand)`; `brand` added to
   `CallActivity`. This is the I1 decision (metrics are per brand).
@@ -60,14 +60,46 @@ amendment.** `pytest` → **22 passed**.
   that at least one always exists), and per-(account, brand) metrics + per-brand call
   activity are generated across all five brands, drawn only from the `Brand` enum.
 
+### Phase 2 (BUILT) — RBAC + PRP enforcement — tasks **T008, T008A, T017, T017A**
+- **Scope-level RBAC** (`src/coach/data_access/rbac.py`, enforced inside every
+  `sqlite_store` read — Principle V / FR-013): access is scoped by **level**, not job
+  title — `self` (rep → own records), `district` (DM → own district), `region` (RD/RBE →
+  whole region), `all` (Head of Sales → all regions). All non-rep roles have **full
+  access** (no read-only). An out-of-scope read raises **`ScopeError`** at the data-access
+  layer (not the UI).
+- **Single config source** — the role → scope-level mapping lives only in
+  `config.settings.ROLE_SCOPE_LEVELS` (`scope_level_for()`); no role names are hard-coded
+  in enforcement logic. `AccessContext` carries a `scope_level` derived from the role; the
+  legacy `read_only` flag was removed.
+- **PRP scrubbing on every read** (T008A / FR-020): HCPs flagged `prp = true` are dropped
+  before any result is returned, at every scope level — `get_accounts` (`prp = 0`),
+  `get_call_activity` (excludes activity tied to PRP accounts — the subtle leak path),
+  and `get_business_metrics` (inherits via `get_accounts`). The vector-store retriever is
+  **not built**; `rbac.py` documents the hook that it must reuse `prp_account_ids()` to
+  scrub PRP when built (T011).
+- **Seeded users** (`generate.py`): `dm_d1`, `dm_d2` (district), `region_r1` (RD/region),
+  `hos_1` (Head of Sales/all) — so all four scope levels are testable.
+- **Hardening applied**: `get_rep` now checks scope **before** revealing existence, so an
+  out-of-scope caller cannot distinguish "rep exists elsewhere" from "rep does not exist"
+  (both raise `ScopeError`) — **FR-014**. A `# TODO(T008A)` marker sits on the
+  `account_brand_metrics` access point so the **Phase 4** per-brand accounts read (FR-007)
+  applies the same PRP scrub.
+
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
-  (same seed → identical data), synthetic-only provenance, store round-trip, plus the new
+  (same seed → identical data), synthetic-only provenance, store round-trip, plus the
   PRP and per-brand assertions.
 - `tests/unit/test_schemas.py` (**T019**) — every recommendation requires a non-empty
   `reason`.
-- Reviewed by the **constitution-guardian** subagent: COMPLIANT within scope, no
-  golden-rule violations.
+- `tests/unit/test_rbac.py` (**T017**) — each scope level sees exactly its territory;
+  out-of-scope reads raise `ScopeError`; out-of-scope vs non-existent reps are
+  indistinguishable (FR-014); role → scope mapping comes from config.
+- `tests/unit/test_prp.py` (**T017A**) — no PRP HCP (or its metrics / call activity) is
+  returned through any read at any scope level; deterministic for the seed; ≥1 PRP HCP
+  exists.
+- Reviewed by the **constitution-guardian** subagent — Phase 1 and Phase 2 both
+  **COMPLIANT** (Principle V scope levels + Principle IV PRP scrubbing verified on every
+  read path); no golden-rule violations.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -165,6 +197,12 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 - **F6 / F8 superseded** — because region-level roles now have full **write/action**
   access, the old read-only API guard tests are recorded as **SUPERSEDED** in `tasks.md`
   (replace with per-route / scope-level authorization tests when write routes are designed).
+- **Optional RBAC hardening (deferred, non-blocking)** — from the Phase 2 guardian review:
+  (#3) `rbac.scoped_rep_ids` / `rep_in_scope` "fail closed to empty/`False`" on an unmapped
+  scope level instead of raising loudly — currently **unreachable** (every `Role` is mapped;
+  `scope_level_for` raises `KeyError` if not); (#4) `AccessContext` doesn't assert
+  `self` → `rep_id` set / `district` → `district_id` set — already **fails closed** safely.
+  Both are fail-closed today and satisfy FR-014; optional to tighten before real connectors.
 - **Doc-sync — DONE.** The scope-level / full-access model is now reflected across all
   docs: `README.md`, `CLAUDE.md`, `docs/`, the constitution (Principle V + preamble), and
   the full spec-kit set (`spec.md` FR-013, `plan.md` Constitution Check row V,
@@ -185,9 +223,9 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** (22 tests pass) |
-| **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer | **PLANNED — unblocked** (scope-level model decided; only role-name terminology is open and non-blocking) |
-| **Phase 3** | **Deterministic ranking** (T023) + LLM reason narration (T024) | Planned |
+| **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** |
+| **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** (35 tests pass) |
+| **Phase 3** | **Deterministic ranking** (T023) + LLM reason narration (T024) | **PLANNED (next)** |
 | **Phase 4** | The **5 brief sections** (prioritization, coaching focus, ride-along prep, accounts/context, opener) | Planned |
 | **Phase 5** | **Assembly + rubric + API** (orchestrator, 5-section checklist rubric test, FastAPI endpoints) | Planned |
 | **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) | Planned |
@@ -201,11 +239,14 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 2. Then read **`specs/001-morning-coaching-brief/`** — `spec.md`, `plan.md`,
    `data-model.md`, `tasks.md` — for the detailed requirements and task IDs.
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
-4. Skim **`src/coach/`** for the built foundation code, and run `uv run pytest -q` to
-   confirm the suite is green.
+4. Skim **`src/coach/`** for the built foundation + RBAC/PRP code, and run
+   `uv run pytest -q` to confirm the suite is green (**35 passing**).
 
-**Immediate next action:** build **Phase 2 (RBAC scope levels + PRP scrubbing
-enforcement)** — the scope-level access model is decided (§3) and no longer blocks it. The
-spec/plan/data-model/tasks and constitution/CLAUDE.md have been updated to the scope-level
-model; only the role-name terminology (RBE expansion, RD ← "RBD") remains open and is
-non-blocking because role names are config.
+**Immediate next action:** build **Phase 3 (deterministic ranking)** — task **T023** (pure
+code, fixed visible weights over the four signals; per-(account, brand) rollup to a single
+per-rep value) and **T024** (LLM narrates the structured `reason` only — never decides
+ranks/scores), with tests T020/T021/T022/T022a.
+
+**Before freezing Phase 3 fixtures:** confirm the **"Litella" brand spelling** and author
+the **T021 golden fixture** against the amended (PRP + 5-brand) seed — changing the brand
+spelling afterward would invalidate the committed `Brand` enum value and the golden data.
