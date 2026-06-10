@@ -25,8 +25,9 @@ synthetic.
 
 ## 2. Current status — BUILT (in the repo now)
 
-**Phase 1 Foundation (incl. the PRP + per-brand amendment) and Phase 2 (RBAC + PRP
-enforcement) are COMPLETE and tested.** `pytest` → **35 passed**.
+**Phase 1 Foundation (incl. the PRP + per-brand amendment), Phase 2 (RBAC + PRP
+enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested.** `pytest` →
+**45 passed**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -85,6 +86,35 @@ enforcement) are COMPLETE and tested.** `pytest` → **35 passed**.
   `account_brand_metrics` access point so the **Phase 4** per-brand accounts read (FR-007)
   applies the same PRP scrub.
 
+### Phase 3 (BUILT) — deterministic ranking — tasks **T020, T021, T022, T022a, T023, T024**
+- **Deterministic scorer** (`src/coach/components/ranking.py`, FR-002/FR-012): pure code,
+  no LLM in the path. For each in-scope rep it reads per-(account, brand) metrics, call
+  activity, and coaching sessions **through the data-access layer** (already RBAC-scoped +
+  PRP-scrubbed — added the `get_account_brand_metrics` read with the same scope + PRP
+  scrub), rolls the four signals up to one value per rep, and produces `RepRanking`s.
+  Tie-break = total desc, opportunity_risk desc, rep_id asc (documented, stable).
+- **Signal normalization (so config weights control influence)**: each signal's raw
+  aggregate is mapped to **0..1** before weighting — `normalized = min(raw, cap) / cap` —
+  using a single, visible config basis `Settings.ranking_norm_caps` (defaults: declining
+  share **3.0**, low call activity **10**, missed follow-up **3**, opportunity/risk **10**;
+  a value at/above its cap saturates to 1.0). `score = Σ(normalized × weight)` with weights
+  from `ranking_weights`. Because every signal shares the 0..1 scale, the **fixed weights
+  alone** control relative influence — a count-style signal can no longer swamp a fractional
+  one. (Scores are now in 0..1; this reordered the two top District-1 reps, and the golden
+  fixture was regenerated.)
+- **Reason shows raw + normalized**: `SignalContribution` now carries **both** `raw_value`
+  (the real aggregate the DM sees) and `normalized_value` (0..1, used in scoring), plus
+  `weight` and `contribution = normalized × weight`. The stale "normalized 0..1" docstring
+  on `raw_value` was **corrected** to describe the real raw aggregate. Top-contributor
+  `DataPoint`s still show real per-(account, brand) figures (share_trend, calls, perf),
+  keyed on the Brand **enum name** (not the unconfirmed display spelling).
+- **LLM kept out of ranking** (`src/coach/llm/narrate.py` + `client.py`): narration takes an
+  already-computed `RepRanking` and rebuilds it with `model_copy` so **only**
+  `reason.summary` can change — ranks, scores, signal values, and contributors are preserved
+  by construction. Model id from config (`BEDROCK_MODEL_ID`), never hard-coded; boto3 is
+  lazy; tests inject a fake LLM (no live Bedrock calls). Until narrated, `summary` holds the
+  `PENDING_SUMMARY` placeholder (see Phase 5 requirement in §5).
+
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
   (same seed → identical data), synthetic-only provenance, store round-trip, plus the
@@ -97,9 +127,19 @@ enforcement) are COMPLETE and tested.** `pytest` → **35 passed**.
 - `tests/unit/test_prp.py` (**T017A**) — no PRP HCP (or its metrics / call activity) is
   returned through any read at any scope level; deterministic for the seed; ≥1 PRP HCP
   exists.
-- Reviewed by the **constitution-guardian** subagent — Phase 1 and Phase 2 both
-  **COMPLIANT** (Principle V scope levels + Principle IV PRP scrubbing verified on every
-  read path); no golden-rule violations.
+- `tests/unit/test_ranking.py` (**T020, T022, T022a**) — score = Σ(normalized × weight);
+  changing a weight changes a signal's influence predictably and a signal at its cap
+  contributes exactly its weight (T020); every `RepRanking` has a structured reason with the
+  four signal contributions + ≥1 top-contributor (T022, FR-003); perturbing a non-signal
+  attribute (tenure, name) leaves ranks/scores/reasons unchanged (T022a, FR-017); plus the
+  **anti-LLM-ranking guard** (narration changes only `reason.summary`).
+- `tests/unit/test_ranking_golden.py` (**T021**) — seed-42 / District-1 golden: ranked
+  order, scores, and reason structure (raw + normalized) match the committed fixture, keyed
+  on Brand enum names (independent of the display spelling).
+- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, and 3 all
+  **COMPLIANT** (Principle V scope levels; Principle IV PRP scrubbing; Principles I/VI
+  deterministic, LLM-out-of-ranking, config-controlled influence, reason shows raw data);
+  no golden-rule violations.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -197,6 +237,12 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 - **F6 / F8 superseded** — because region-level roles now have full **write/action**
   access, the old read-only API guard tests are recorded as **SUPERSEDED** in `tasks.md`
   (replace with per-route / scope-level authorization tests when write routes are designed).
+- **Phase 5 requirement — narrate before exposing a ranking.** The deterministic scorer
+  leaves `reason.summary` as the `PENDING_SUMMARY` placeholder until LLM narration (T024)
+  runs. The **API / orchestrator MUST always run narration before any ranking reaches a
+  user** — no un-narrated ranking (placeholder summary) should ever be surfaced. Add a test
+  when the API lands asserting no response contains `PENDING_SUMMARY`. (From the Phase 3
+  guardian review; not a Phase 3 bug — the scorer correctly leaves prose to T024.)
 - **Optional RBAC hardening (deferred, non-blocking)** — from the Phase 2 guardian review:
   (#3) `rbac.scoped_rep_ids` / `rep_in_scope` "fail closed to empty/`False`" on an unmapped
   scope level instead of raising loudly — currently **unreachable** (every `Role` is mapped;
@@ -224,9 +270,9 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** |
-| **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** (35 tests pass) |
-| **Phase 3** | **Deterministic ranking** (T023) + LLM reason narration (T024) | **PLANNED (next)** |
-| **Phase 4** | The **5 brief sections** (prioritization, coaching focus, ride-along prep, accounts/context, opener) | Planned |
+| **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** |
+| **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** (45 tests pass) |
+| **Phase 4** | The remaining **brief sections, built one at a time** (coaching focus, ride-along prep, accounts/context, opener) — section 1 (ranking) is done | **PLANNED (next)** |
 | **Phase 5** | **Assembly + rubric + API** (orchestrator, 5-section checklist rubric test, FastAPI endpoints) | Planned |
 | **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) | Planned |
 | **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
@@ -239,14 +285,16 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 2. Then read **`specs/001-morning-coaching-brief/`** — `spec.md`, `plan.md`,
    `data-model.md`, `tasks.md` — for the detailed requirements and task IDs.
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
-4. Skim **`src/coach/`** for the built foundation + RBAC/PRP code, and run
-   `uv run pytest -q` to confirm the suite is green (**35 passing**).
+4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking code, and run
+   `uv run pytest -q` to confirm the suite is green (**45 passing**).
 
-**Immediate next action:** build **Phase 3 (deterministic ranking)** — task **T023** (pure
-code, fixed visible weights over the four signals; per-(account, brand) rollup to a single
-per-rep value) and **T024** (LLM narrates the structured `reason` only — never decides
-ranks/scores), with tests T020/T021/T022/T022a.
+**Immediate next action:** build **Phase 4 (the remaining brief sections, one at a time)** —
+coaching focus (T026–T028), ride-along prep (T029–T031, RAG over notes — needs the retriever
+T010/T011), accounts/context (T032–T034, per-(account, brand), reusing
+`get_account_brand_metrics`), and the opener (T035–T037). Section 1 (ranking) is already done.
+Each section is a build + test increment.
 
-**Before freezing Phase 3 fixtures:** confirm the **"Litella" brand spelling** and author
-the **T021 golden fixture** against the amended (PRP + 5-brand) seed — changing the brand
-spelling afterward would invalidate the committed `Brand` enum value and the golden data.
+**Still open before fixtures are frozen:** the **"Litella" brand spelling** (the T021 golden
+already avoids the display spelling by keying on Brand enum names, but confirm it before the
+enum value is finalized). When the **API/orchestrator** lands (Phase 5), enforce
+narrate-before-expose (see §5) so no `PENDING_SUMMARY` placeholder reaches a user.
