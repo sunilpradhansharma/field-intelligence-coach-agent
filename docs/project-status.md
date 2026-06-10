@@ -299,7 +299,7 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 
 ---
 
-## 4. Stakeholder answers (Nisha) — recorded as project facts
+## 4. Stakeholder answers — recorded as project facts
 
 - **Access** — a DM sees **only their own district**. Account overlaps between DMs happen
   but are rare exceptions and are **out of scope for the MVP**.
@@ -322,7 +322,7 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   (depends on each team's IC plan), so build it **configurable per team** when we reach
   that phase.
 - **"Good coaching" framework** — none exists formally; it is best practice from the
-  strongest DMs. Nisha suggested a **~60-minute workshop** with a few DMs and RDs.
+  strongest DMs. The business suggested a **~60-minute workshop** with a few DMs and RDs.
 
 ---
 
@@ -333,10 +333,10 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   rights. *Does NOT block Phase 2* — role names are config; the scope level is decided (§3).
 - **Confirm "RD" = the role earlier mislabeled "RBD" (terminology only).** *Does NOT block
   Phase 2* for the same reason — only the label is open, not the region/full-access level.
-- **Tune scoring/selection parameters with the business (Nisha).** The **coaching-focus
+- **Tune scoring/selection parameters with the business.** The **coaching-focus
   trigger thresholds** (`Settings.focus_thresholds`, default 0.5 / 1 / 1 / 1) and the
   **ranking normalization caps** (`Settings.ranking_norm_caps`, default 3.0 / 10 / 3 / 10 —
-  ADR 0001) are config-visible product judgments. Review/tune them once Nisha sees real
+  ADR 0001) are config-visible product judgments. Review/tune them once the business sees real
   output. When changed, the T021 golden and the coaching-focus example fixture must be
   regenerated together (they move in lockstep).
 - **F6 / F8 superseded** — because region-level roles now have full **write/action**
@@ -402,7 +402,7 @@ names** to the DM — and flag behaviour-vs-opportunity mismatches, each with a 
 reason. Read per-(account, brand) data **only through `get_account_brand_metrics`** (already
 RBAC-scoped + PRP-scrubbed); the LLM only phrases. Then section 4 (opener, T035–T037) follows.
 
-**Still open:** **tuning the focus thresholds / ranking caps with Nisha** (see §5). When the
+**Still open:** **tuning the focus thresholds / ranking caps with the business** (see §5). When the
 **API/orchestrator** lands (Phase 5), enforce narrate-before-expose (see §5) so no
 `PENDING_SUMMARY` placeholder reaches a user. (The brand spelling is now confirmed — LILETTA;
 the golden/fixtures key on Brand enum names so they were unaffected.)

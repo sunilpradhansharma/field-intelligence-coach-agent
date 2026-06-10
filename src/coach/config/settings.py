@@ -137,6 +137,14 @@ class Settings:
         default_factory=lambda: int(os.getenv("COACH_RIDE_ALONG_MAX_NOTES", "2"))
     )
 
+    # Accounts / business context (T033): how many KEY (account, brand) rows to surface
+    # (the focused list, not the whole book), and the behaviour-vs-opportunity mismatch rule
+    # threshold — a high-opportunity (account, brand) with calls <= this is flagged (FR-008).
+    accounts_max: int = field(default_factory=lambda: int(os.getenv("COACH_ACCOUNTS_MAX", "5")))
+    mismatch_call_threshold: int = field(
+        default_factory=lambda: int(os.getenv("COACH_MISMATCH_CALL_THRESHOLD", "2"))
+    )
+
 
 def get_settings() -> Settings:
     """Return settings resolved from the current environment."""

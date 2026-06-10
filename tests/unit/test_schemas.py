@@ -4,10 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from coach.schemas import (
+    AccountBrandContext,
     AccountFocus,
-    BusinessMetric,
+    Brand,
     CoachingFocus,
     Opener,
+    OpportunityLevel,
     Performance,
     Reason,
     RepRanking,
@@ -41,16 +43,20 @@ def test_coaching_focus_requires_reason():
 
 
 def test_account_focus_requires_reason():
-    ctx = BusinessMetric(
-        account_id="acct_x",
+    ctx = AccountBrandContext(
         market_share=0.2,
         share_trend=-0.05,
         volume=1000,
         spend=2000,
         performance=Performance.under,
+        opportunity_level=OpportunityLevel.high,
+        calls=1,
+        calls_trend=-0.3,
     )
     with pytest.raises(ValidationError):
-        AccountFocus(account_id="acct_x", context=ctx, mismatch_flag=True)  # type: ignore[call-arg]
+        AccountFocus(  # type: ignore[call-arg]
+            account_id="acct_x", brand=Brand.liletta, context=ctx, mismatch_flag=True
+        )
 
 
 def test_opener_requires_reason():

@@ -211,10 +211,24 @@ class CoachingFocus(BaseModel):
     reason: Reason
 
 
+class AccountBrandContext(BaseModel):
+    """Per-(account, brand) business context shown to the DM (FR-007 / I1)."""
+
+    market_share: float
+    share_trend: float
+    volume: float
+    spend: float
+    performance: Performance
+    opportunity_level: OpportunityLevel
+    calls: int
+    calls_trend: float
+
+
 class AccountFocus(BaseModel):
     account_id: str
-    context: BusinessMetric
-    mismatch_flag: bool
+    brand: Brand  # labeled to the DM via the enum DISPLAY name (e.g. "LILETTA") — FR-007
+    context: AccountBrandContext  # per-(account, brand) (I1)
+    mismatch_flag: bool  # behaviour-vs-opportunity mismatch for this (account, brand) — FR-008
     reason: Reason
 
 

@@ -72,4 +72,4 @@ data, so the DM (and any reviewer) still sees real numbers — see Consequences.
 
 ## Open follow-up
 
-- Confirm/tune the normalization caps with the business (Nisha) once she sees real output.
+- Confirm/tune the normalization caps with the business once they see real output.

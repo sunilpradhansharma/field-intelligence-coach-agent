@@ -10,7 +10,13 @@ just the `summary` field replaced — every other field is preserved by construc
 from __future__ import annotations
 
 from coach.llm.client import LLM
-from coach.schemas import CoachingFocus, EmptyState, RepRanking, RideAlongPrep
+from coach.schemas import (
+    AccountFocus,
+    CoachingFocus,
+    EmptyState,
+    RepRanking,
+    RideAlongPrep,
+)
 
 _INSTRUCTION = (
     "Write a short, plain-language reason a district manager will read about why this sales "
@@ -114,3 +120,37 @@ def narrate_ride_along(prep: RideAlongPrep | EmptyState, llm: LLM) -> RideAlongP
         return prep.model_copy(update={"reason": new_reason})
     opening = llm.narrate(facts, _RIDE_ALONG_OPENING_INSTRUCTION).strip() or prep.opening
     return prep.model_copy(update={"reason": new_reason, "opening": opening})
+
+
+_ACCOUNT_INSTRUCTION = (
+    "Write a short, plain-language reason a district manager will read about this key account "
+    "and brand. Use ONLY the structured business context and data points provided — name the "
+    "brand and the key numbers, do not invent anything, and do not change the mismatch flag. "
+    "One or two sentences."
+)
+
+
+def _account_input(focus: AccountFocus) -> dict:
+    """Read-only facts handed to the LLM. It may phrase them; it may not alter them."""
+    return {
+        "account_id": focus.account_id,
+        "brand": focus.brand.value,  # display name (e.g. "LILETTA")
+        "context": focus.context.model_dump(),
+        "mismatch_flag": focus.mismatch_flag,
+        "data_points": [d.model_dump() for d in focus.reason.data_points],
+    }
+
+
+def narrate_account_focus(focus: AccountFocus, llm: LLM) -> AccountFocus:
+    """Return a copy of `focus` with ONLY `reason.summary` replaced by LLM prose. The metrics,
+    the brand, the mismatch flag, and the data points are preserved by construction (FR-007/008;
+    anti-LLM guard verifies it)."""
+    summary = llm.narrate(_account_input(focus), _ACCOUNT_INSTRUCTION).strip()
+    if not summary:
+        summary = focus.reason.summary  # schema requires a non-empty summary; keep prior
+    new_reason = focus.reason.model_copy(update={"summary": summary})
+    return focus.model_copy(update={"reason": new_reason})
+
+
+def narrate_account_focuses(focuses: list[AccountFocus], llm: LLM) -> list[AccountFocus]:
+    return [narrate_account_focus(f, llm) for f in focuses]
