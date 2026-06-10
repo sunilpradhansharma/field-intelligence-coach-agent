@@ -27,9 +27,9 @@ synthetic.
 
 **Phase 1 Foundation (incl. the PRP + per-brand amendment), Phase 2 (RBAC + PRP
 enforcement), and Phase 3 (deterministic ranking) are COMPLETE and tested. Phase 4 (the
-brief sections) is IN PROGRESS — sections 1 (coaching focus) and 2 (ride-along prep) are
-done; sections 3 (accounts + per-brand context) and 4 (opener) remain.** `pytest` →
-**72 passed**.
+brief sections) is IN PROGRESS — sections 1 (coaching focus), 2 (ride-along prep), and 3
+(accounts + per-brand business context) are done; only section 4 (opener) remains.**
+`pytest` → **83 passed**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -183,12 +183,38 @@ and Step 2b (the `ride_along_prep` **component**, T029/T030) are both complete.
     (notes, agreed actions, observe-next, provenance, empty-state message) are preserved by
     construction (anti-LLM guard test verifies it). Model id from config; fake LLM in tests.
 
-**Remaining Phase 4 sections (planned):**
+**Section 3 of 4 — accounts + per-brand business context — tasks T032, T033 — DONE**
+(`src/coach/components/accounts_context.py`, FR-007/FR-008/FR-010/FR-018):
+- **Focused selection, decided in code**: surfaces a **focused list of key (account, brand)
+  rows** — not the rep's whole book — chosen by a deterministic config rule/cap
+  (`Settings.accounts_max`, priority = opportunity + risk + share-decline + mismatch, with a
+  documented tie-break). The LLM never chooses or reorders accounts.
+- **Per-brand, labeled by the enum** (FR-007 / I1): **one `AccountFocus` per (account, brand)**
+  — no per-account collapsing — labeled by the **Brand enum DISPLAY name** (e.g. **LILETTA**
+  renders correctly; no brand strings hard-coded). Each carries the per-brand business context
+  (market_share, share_trend, volume, spend, performance, opportunity, calls, calls_trend).
+- **Mismatch flag in code** (FR-008): the behaviour-vs-opportunity flag (high opportunity +
+  low calls, `Settings.mismatch_call_threshold`) is computed deterministically and carries its
+  own reason; the LLM cannot set or alter it.
+- **RBAC + PRP preserved**: reads **only** through `get_account_brand_metrics` and
+  `get_call_activity` (both RBAC-scoped + PRP-scrubbed), passing the `AccessContext` — so an
+  out-of-scope rep → `ScopeError` and **PRP-flagged accounts never appear**.
+- **Structured reason on every item** (FR-010); **edge cases without fabrication** (FR-018):
+  no accounts → empty list; a missing call-activity row → `calls = 0` + a clear "not recorded"
+  note.
+- **LLM limited to wording**: `narrate_account_focus` (`src/coach/llm/narrate.py`) rebuilds via
+  `model_copy` so only `reason.summary` changes — brand, context metrics, mismatch flag, and
+  data points are preserved by construction (anti-LLM guard test verifies it).
+- New/updated schemas: `AccountFocus` now carries `brand` + `AccountBrandContext` (the I1
+  per-(account, brand) shape, incl. `calls_trend`); `test_schemas.py` updated to match.
+
+**Remaining Phase 4 sections:**
 1. ✅ Coaching focus — done.
 2. ✅ Ride-along prep — done (retriever seam T010/T011 + component T029/T030).
-3. **Accounts + per-brand business context** — key accounts with context and mismatch flags;
-   first place **brand names are surfaced** to the DM (FR-007) — tasks T032–T034.
-4. **Opener** — a short suggested opener from the assembled context — tasks T035–T037.
+3. ✅ Accounts + per-brand business context — done (T032/T033); first section to **surface
+   brand names** to the DM (FR-007).
+4. **Opener** — a short suggested opener from the assembled context — tasks T035–T037 (last
+   section).
 
 **Production mapping:** local in-memory store + Titan embeddings → **Amazon Bedrock Knowledge
 Bases / OpenSearch** behind the same `EmbeddingProvider` / `VectorStore` / `Retriever`
@@ -231,12 +257,19 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   (out-of-scope rep → `ScopeError`) and **PRP** (a PRP-tied note + its structured fields never
   surfaced); provenance on every item (FR-010); the **anti-LLM guard** (only summary + opening
   change); and the FR-018 edge cases (no-history `EmptyState`; missing field → "not recorded").
+- `tests/component/test_accounts_context.py` (**T032**) — focused example-based selection
+  (seed 42, capped, a subset of the book); **per-brand labeling** (one `AccountFocus` per
+  (account, brand); LILETTA renders); **mismatch flag** (high-opp + low calls flagged with a
+  reason; well-served not flagged; the config threshold flips it); **RBAC** (`ScopeError`) and
+  **PRP** (PRP accounts never appear); explainability (FR-010); the **anti-LLM guard** (only
+  `reason.summary` changes); FR-018 edges (no-accounts → empty; missing calls → "not recorded").
 - Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, and the Phase 4
-  sections built so far (**coaching focus**, the **notes retriever seam**, and the
-  **ride-along-prep component**) all **COMPLIANT** (Principle V scope levels; Principle IV PRP
-  scrubbing — reused helpers, not a bypass, structured-field leak closed; Principles I/VI
-  deterministic + LLM-out-of-deciding + config-controlled; Principle II provenance/explainable;
-  Principle III synthetic-only; Principle VII behind interfaces); no golden-rule violations.
+  sections built so far (**coaching focus**, the **notes retriever seam**, the
+  **ride-along-prep component**, and the **accounts/business-context component**) all
+  **COMPLIANT** (Principle V scope levels; Principle IV PRP scrubbing — reused helpers, not a
+  bypass; Principles I/VI deterministic + LLM-out-of-deciding + config-controlled; Principle II
+  provenance/explainable; Principle III synthetic-only; Principle VII behind interfaces); no
+  golden-rule violations.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -377,7 +410,7 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** |
 | **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** |
 | **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** |
-| **Phase 4** | The **brief sections, built one at a time**: (1) **coaching focus** ✅ T026/T027; (2) **ride-along prep** ✅ (retriever seam T010/T011 + component T029/T030); (3) accounts + per-brand context (T032–T034) — next; (4) opener (T035–T037) | **IN PROGRESS** (§1 + §2 done; 72 tests pass) |
+| **Phase 4** | The **brief sections, built one at a time**: (1) **coaching focus** ✅ T026/T027; (2) **ride-along prep** ✅ (T010/T011 + T029/T030); (3) **accounts + per-brand context** ✅ T032/T033; (4) opener (T035–T037) — next | **IN PROGRESS** (§1–§3 done; 83 tests pass) |
 | **Phase 5** | **Assembly + rubric + API** (orchestrator, 5-section checklist rubric test, FastAPI endpoints) | Planned |
 | **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) | Planned |
 | **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
@@ -391,16 +424,17 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
    `data-model.md`, `tasks.md` — for the detailed requirements and task IDs.
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
 4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + coaching-focus +
-   notes-retriever + ride-along-prep code, and run `uv run pytest -q` to confirm the suite is
-   green (**72 passing**).
+   notes-retriever + ride-along-prep + accounts-context code, and run `uv run pytest -q` to
+   confirm the suite is green (**83 passing**).
 
-**Immediate next action:** build **Phase 4 section 3 — accounts + per-brand business context**
-(tasks **T032–T034**, FR-007/FR-008). The deterministic component should select the rep's key
-accounts and attach per-(account, brand) business context (share, volume, spend, performance,
-recent call activity) **labeled by brand** — this is the first section that **surfaces brand
-names** to the DM — and flag behaviour-vs-opportunity mismatches, each with a structured
-reason. Read per-(account, brand) data **only through `get_account_brand_metrics`** (already
-RBAC-scoped + PRP-scrubbed); the LLM only phrases. Then section 4 (opener, T035–T037) follows.
+**Immediate next action:** build **Phase 4 section 4 — the opener** (tasks **T035–T037**,
+FR-009) — the **last brief section**. The deterministic component should assemble a short
+suggested opener that references the rep's specific situation (built from the other sections'
+already-computed facts); the LLM phrases the opener text only (suggestion-only, never an
+action — FR-011), following the same pattern (`model_copy` → wording field). With all five
+sections done, **Phase 5 (assembly + 5-section rubric + FastAPI)** follows — wiring the
+orchestrator/brief and enforcing **narrate-before-expose** (see §5) so no `PENDING_SUMMARY`
+placeholder reaches a user.
 
 **Still open:** **tuning the focus thresholds / ranking caps with the business** (see §5). When the
 **API/orchestrator** lands (Phase 5), enforce narrate-before-expose (see §5) so no
