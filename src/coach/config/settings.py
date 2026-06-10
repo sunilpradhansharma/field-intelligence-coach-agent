@@ -47,6 +47,10 @@ def _default_norm_caps() -> dict[str, float]:
     to 1.0. Each signal's raw aggregate is mapped to 0..1 as `min(raw, cap) / cap` BEFORE its
     weight is applied, so the weights alone control relative influence (no count-style signal
     can dominate a fractional one). Visible + env-overridable; never hard-coded in the scorer.
+
+    Rationale + options: see docs/adr/0001-signal-normalization.md. These default caps are a
+    product judgment and are TUNABLE — review/tune them with the business once real output is
+    seen (ADR 0001 open follow-up).
     """
     return {
         # summed magnitude of negative share_trend across the rep's (account, brand) rows

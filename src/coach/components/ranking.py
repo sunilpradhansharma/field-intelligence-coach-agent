@@ -20,6 +20,7 @@ aggregate, which is then NORMALIZED to 0..1 via a config-visible cap before weig
 normalized = min(raw, cap) / cap   (cap from Settings.ranking_norm_caps; saturates at 1.0)
 score = sum(normalized_value * fixed_weight) using weights + caps from config. Because every
 signal is on the same 0..1 scale, the fixed weights alone control relative influence.
+Rationale + options considered: docs/adr/0001-signal-normalization.md.
 """
 
 from __future__ import annotations

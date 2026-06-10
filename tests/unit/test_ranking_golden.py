@@ -21,10 +21,11 @@ SEED = 42
 # (rep_id, rank, total_score) for District 1 as a DM sees it. Ties (0.0) are broken by the
 # documented rule: total desc, opportunity_risk desc, rep_id asc.
 #
-# NOTE: these scores changed (now in 0..1) after the signal-NORMALIZATION fix — each signal
-# is mapped to 0..1 via `Settings.ranking_norm_caps` before weighting, so the weights alone
-# control influence. Normalization also reordered the two top reps (003 now edges 001),
-# because 001's huge raw counts saturate at the cap while 003 scores higher across signals.
+# NOTE: these scores changed (now in 0..1) due to signal NORMALIZATION — see
+# docs/adr/0001-signal-normalization.md. Each signal is mapped to 0..1 via
+# `Settings.ranking_norm_caps` before weighting, so the weights alone control influence.
+# Normalization also reordered the two top reps (003 now edges 001), because 001's huge raw
+# counts saturate at the cap while 003 scores higher across signals.
 GOLDEN_D1 = [
     ("rep_d1_003", 1, 0.891667),
     ("rep_d1_001", 2, 0.833333),
