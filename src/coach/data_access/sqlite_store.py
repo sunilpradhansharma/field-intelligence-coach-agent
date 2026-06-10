@@ -2,11 +2,12 @@
 
 Maps to Aurora Postgres / Athena+S3 in production — same interface, swapped impl.
 
-NOTE (scope): RBAC *enforcement* (out-of-scope denial via `ScopeError`, RBD read-only
-rules, and the dedicated RBAC tests) is task T008 and is intentionally NOT implemented
-in the foundation phase. The reads below load the caller's territory partition (a DM's
-district, or all districts in an RBD's region); they do not yet deny out-of-scope
-single-id reads. The TODO markers point to where T008 will add enforcement.
+RBAC + PRP are enforced HERE, on every read (Principle V / FR-013, FR-020):
+- **RBAC (T008)**: each read is scoped to the caller's `AccessContext.scope_level`
+  (self / district / region / all). A read for an out-of-scope rep raises `ScopeError`.
+- **PRP scrubbing (T008A)**: HCPs/accounts flagged ``prp = true`` (and their call activity)
+  are dropped before results are returned, at every scope level — no PRP HCP reaches a
+  field user. Scoping/scrubbing logic lives in `coach.data_access.rbac`.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from coach.data_access import rbac
 from coach.data_access.interface import AccessContext, DataAccess
 from coach.schemas import (
     Account,
@@ -27,7 +29,6 @@ from coach.schemas import (
     OpportunityLevel,
     Performance,
     Rep,
-    Role,
 )
 
 _SCHEMA = """
@@ -196,21 +197,14 @@ class SqliteStore(DataAccess):
         self._conn.commit()
 
     # -------------------------------------------------------------------- reads
-    def _allowed_district_ids(self, ctx: AccessContext) -> list[str]:
-        """Districts the caller may read. (RBAC enforcement hardening is T008.)"""
-        if ctx.role == Role.district_manager and ctx.district_id is not None:
-            return [ctx.district_id]
-        # RBD: all districts in the region.
-        rows = self._conn.execute(
-            "SELECT district_id FROM districts WHERE region_id = ?", (ctx.region_id,)
-        ).fetchall()
-        return [r["district_id"] for r in rows]
-
+    # Every read enforces RBAC (scope level) and PRP scrubbing via `rbac` (T008/T008A).
     def get_reps(self, ctx: AccessContext) -> list[Rep]:
-        placeholders = ",".join("?" for _ in self._allowed_district_ids(ctx))
-        ids = self._allowed_district_ids(ctx)
+        rep_ids = rbac.scoped_rep_ids(self._conn, ctx)
+        if not rep_ids:
+            return []
+        placeholders = ",".join("?" for _ in rep_ids)
         rows = self._conn.execute(
-            f"SELECT * FROM reps WHERE district_id IN ({placeholders}) ORDER BY rep_id", ids
+            f"SELECT * FROM reps WHERE rep_id IN ({placeholders}) ORDER BY rep_id", rep_ids
         ).fetchall()
         return [_rep(r) for r in rows]
 
@@ -218,18 +212,25 @@ class SqliteStore(DataAccess):
         row = self._conn.execute("SELECT * FROM reps WHERE rep_id = ?", (rep_id,)).fetchone()
         if row is None:
             raise KeyError(rep_id)
-        # TODO(T008): raise ScopeError if row['district_id'] not in allowed districts.
+        rbac.require_rep_in_scope(self._conn, ctx, rep_id)  # -> ScopeError if out of scope
         return _rep(row)
 
     def get_accounts(self, ctx: AccessContext, rep_id: str) -> list[Account]:
+        rbac.require_rep_in_scope(self._conn, ctx, rep_id)
+        # PRP scrub (T008A): `prp = 0` drops restricted HCPs before they are returned.
         rows = self._conn.execute(
-            "SELECT * FROM accounts WHERE rep_id = ? ORDER BY account_id", (rep_id,)
+            "SELECT * FROM accounts WHERE rep_id = ? AND prp = 0 ORDER BY account_id", (rep_id,)
         ).fetchall()
         return [_account(r) for r in rows]
 
     def get_call_activity(self, ctx: AccessContext, rep_id: str) -> list[CallActivity]:
+        rbac.require_rep_in_scope(self._conn, ctx, rep_id)
+        # PRP scrub (T008A): exclude call activity tied to PRP-flagged accounts.
         rows = self._conn.execute(
-            "SELECT * FROM call_activity WHERE rep_id = ? ORDER BY activity_id", (rep_id,)
+            "SELECT * FROM call_activity WHERE rep_id = ? "
+            "AND account_id NOT IN (SELECT account_id FROM accounts WHERE prp = 1) "
+            "ORDER BY activity_id",
+            (rep_id,),
         ).fetchall()
         return [
             CallActivity(
@@ -258,6 +259,7 @@ class SqliteStore(DataAccess):
         ]
 
     def get_coaching_sessions(self, ctx: AccessContext, rep_id: str) -> list[CoachingSession]:
+        rbac.require_rep_in_scope(self._conn, ctx, rep_id)
         rows = self._conn.execute(
             "SELECT * FROM coaching_sessions WHERE rep_id = ? ORDER BY session_id", (rep_id,)
         ).fetchall()

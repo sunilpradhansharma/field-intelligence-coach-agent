@@ -227,10 +227,19 @@ def generate(seed: int) -> Dataset:
             region_id="R1",
             district_id="D2",
         ),
+        # Region-scope user (RD) — full access across all districts in the region.
         User(
-            user_id="rbd_r1",
-            name="RBD Region 1",
-            role=Role.regional_business_director,
+            user_id="region_r1",
+            name="RD Region 1",
+            role=Role.regional_director,
+            region_id="R1",
+            district_id=None,
+        ),
+        # All-scope user (Head of Sales) — full access across all regions.
+        User(
+            user_id="hos_1",
+            name="Head of Sales",
+            role=Role.head_of_sales,
             region_id="R1",
             district_id=None,
         ),

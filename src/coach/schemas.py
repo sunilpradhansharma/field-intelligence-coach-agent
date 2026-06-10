@@ -16,8 +16,26 @@ from pydantic import BaseModel, Field
 
 # --------------------------------------------------------------------------- enums
 class Role(StrEnum):
+    """Role NAMES. The authoritative role → scope-level mapping lives in ONE place:
+    `coach.config.settings.ROLE_SCOPE_LEVELS`. RBAC code scopes by `ScopeLevel`, never by
+    these names directly. ("RD"/"RBE" terminology is still being confirmed — names are
+    config; see docs/project-status.md.)"""
+
+    rep = "rep"
     district_manager = "district_manager"
-    regional_business_director = "regional_business_director"
+    regional_director = "regional_director"  # RD
+    regional_business_executive = "regional_business_executive"  # RBE (working definition)
+    head_of_sales = "head_of_sales"
+
+
+class ScopeLevel(StrEnum):
+    """Territory scope a role grants — the RBAC mechanism (Principle V / FR-013).
+    All non-rep levels have FULL access (no read-only)."""
+
+    self_ = "self"  # a rep — only their own records
+    district = "district"  # a DM — their own district
+    region = "region"  # region-level roles (RD, RBE) — their whole region
+    all_ = "all"  # top sales role (Head of Sales) — all regions
 
 
 class AccountType(StrEnum):

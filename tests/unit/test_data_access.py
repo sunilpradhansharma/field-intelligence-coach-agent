@@ -37,10 +37,12 @@ def test_top_level_shape():
     assert len(ds.regions) == 1
     assert len(ds.districts) == 2
     assert {d.district_id for d in ds.districts} == {"D1", "D2"}
-    # 2 DMs + 1 RBD; both districts in the same region.
+    # 2 DMs (district) + 1 RD (region) + 1 Head of Sales (all); both districts in one region.
     roles = Counter(u.role for u in ds.users)
     assert roles[Role.district_manager] == 2
-    assert roles[Role.regional_business_director] == 1
+    assert roles[Role.regional_director] == 1
+    assert roles[Role.head_of_sales] == 1
+    assert len(ds.users) == 4
     assert all(d.region_id == "R1" for d in ds.districts)
 
 

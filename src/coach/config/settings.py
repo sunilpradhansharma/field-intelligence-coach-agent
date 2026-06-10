@@ -10,9 +10,27 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from coach.schemas import Role, ScopeLevel
+
 # The four explainable ranking signals (Principle VI / FR-002). Weights are fixed and
 # visible; defaults are equal. Override via env vars `COACH_WEIGHT_<SIGNAL>` if needed.
 SIGNALS = ("declining_share", "low_call_activity", "missed_follow_up", "opportunity_risk")
+
+# SINGLE SOURCE OF TRUTH for the role → territory scope-level mapping (RBAC, Principle V /
+# FR-013). RBAC code scopes by `ScopeLevel`; role NAMES are configured only here, never
+# hard-coded across the codebase. All non-rep roles get FULL access within their scope.
+ROLE_SCOPE_LEVELS: dict[Role, ScopeLevel] = {
+    Role.rep: ScopeLevel.self_,
+    Role.district_manager: ScopeLevel.district,
+    Role.regional_director: ScopeLevel.region,
+    Role.regional_business_executive: ScopeLevel.region,
+    Role.head_of_sales: ScopeLevel.all_,
+}
+
+
+def scope_level_for(role: Role) -> ScopeLevel:
+    """Resolve a role NAME to its territory scope level (the single config source)."""
+    return ROLE_SCOPE_LEVELS[role]
 
 
 def _default_weights() -> dict[str, float]:
