@@ -64,8 +64,8 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Provider seams (Bedrock, vector store, guardrail, observability)
 
-- [ ] T010 [P] Implement Bedrock embeddings (Titan) `Embedder` in `src/coach/llm/embeddings.py` (model id from config) per contracts/data-access.md
-- [ ] T011 Implement the FAISS/Chroma `Retriever` in `src/coach/data_access/faiss_retriever.py` and index coaching notes (RBAC-scoped retrieval) — depends on T005, T010, T009
+- [X] T010 [P] Implement Bedrock embeddings (Titan) `EmbeddingProvider` in `src/coach/llm/embeddings.py` (model id from config; lazy boto3; deterministic `FakeEmbeddings` for offline tests) per contracts/data-access.md
+- [X] T011 Implement the `Retriever` seam in `src/coach/data_access/notes_retriever.py` (+ `vector_store.py`: a `VectorStore` interface with an in-memory cosine store for the MVP → Chroma / Bedrock Knowledge Bases / OpenSearch in prod). Indexes coaching notes and enforces the **same RBAC scope + PRP scrubbing at query time** (reuses `rbac.require_rep_in_scope` / `scoped_rep_ids` / `prp_account_ids`); single guarded entry point `search_notes`. See **docs/adr/0002-notes-retriever-rbac-prp.md**. NOTE: this is the seam only — the ride-along-prep component (T029–T031) that consumes it is separate. Depends on T005, T008/T008A, T010, T009
 - [ ] T012 [P] Implement the Bedrock Claude `LLM` wrapper in `src/coach/llm/client.py` (model id from config; only `narrate(reason)` / `draft_opener()` — MUST NOT compute or alter rankings)
 - [ ] T013 [P] Implement the PII `Guardrail` seam in `src/coach/guardrails/pii.py` (pass-through hook for MVP → Bedrock Guardrails in prod)
 - [ ] T014 [P] Implement audit/observability in `src/coach/observability/audit.py` (structured per-brief and per-LLM-call records; no out-of-scope data, no raw PII). **Record field-level data classification** (rep fields = HR-sensitive; HCP fields = private/IQVIA-PDRP) so the logger knows which fields must never be emitted (FR-016)

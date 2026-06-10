@@ -16,9 +16,10 @@ PRP scrubbing (FR-020): HCPs/accounts flagged ``prp = true`` (and any dependent 
 their call activity / brand metrics) are removed on EVERY read before results are returned,
 regardless of scope level, so no PRP HCP ever reaches a field user.
 
-RETRIEVER PRP HOOK: the vector-store `Retriever` (T011) is NOT built yet. When it is, it
-MUST also scrub PRP — reuse `prp_account_ids()` to drop any note/result tied to a PRP
-account before returning it. Do not return retriever results without this scrub.
+RETRIEVER (T011, BUILT): the vector-store `Retriever`
+(`coach.data_access.notes_retriever.NotesRetriever`) reuses these same helpers at query time
+— `require_rep_in_scope` for RBAC and `prp_account_ids()` to drop any note tied to a PRP
+account. It is not a separate trust boundary (see docs/adr/0002-notes-retriever-rbac-prp.md).
 """
 
 from __future__ import annotations
