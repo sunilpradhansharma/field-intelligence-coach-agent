@@ -37,6 +37,24 @@ class OpportunityLevel(StrEnum):
     high = "high"
 
 
+class Brand(StrEnum):
+    """The modeled brand portfolio — SINGLE SOURCE OF TRUTH for brand names.
+
+    Performance data (share, volume, spend, call activity) is attributable to a brand
+    via the (account, brand) pair (see data-model.md). No brand name may be hard-coded
+    anywhere else; draw from this enum.
+
+    NOTE: the spelling of "Litella" is UNCONFIRMED and must be finalized before the
+    `Brand` enum value and the T021 golden fixture are frozen (see spec Assumptions).
+    """
+
+    lupron_peds = "LUPRON PEDS"
+    lupron_uro = "LUPRON URO"
+    lupron_gyn = "LUPRON GYN"
+    synthroid = "Synthroid"
+    litella = "Litella"  # spelling unconfirmed — see class docstring
+
+
 class SignalName(StrEnum):
     declining_share = "declining_share"
     low_call_activity = "low_call_activity"
@@ -83,12 +101,33 @@ class Account(BaseModel):
     performance: Performance
     opportunity_level: OpportunityLevel
     risk_flag: bool
+    # PRP (prescriber data restriction). Data is ADDED here in the foundation phase;
+    # the data-access SCRUBBING of prp=True HCPs is a later task (T008A, FR-020).
+    prp: bool = False
+
+
+class AccountBrandMetrics(BaseModel):
+    """Per-(account, brand) performance metrics (data-model.md I1 decision).
+
+    One account can carry metrics across multiple brands; keyed by (account_id, brand).
+    """
+
+    account_id: str
+    brand: Brand
+    market_share: float
+    share_trend: float  # signed; negative = declining share
+    volume: float
+    spend: float
+    performance: Performance
+    opportunity_level: OpportunityLevel
+    risk_flag: bool
 
 
 class CallActivity(BaseModel):
     activity_id: str
     rep_id: str
     account_id: str
+    brand: Brand  # call activity is per-(account, brand) (data-model.md I1)
     period: str
     calls: int
     calls_trend: float  # signed recent change in activity
@@ -180,5 +219,6 @@ class Dataset(BaseModel):
     users: list[User] = Field(default_factory=list)
     reps: list[Rep] = Field(default_factory=list)
     accounts: list[Account] = Field(default_factory=list)
+    account_brand_metrics: list[AccountBrandMetrics] = Field(default_factory=list)
     call_activity: list[CallActivity] = Field(default_factory=list)
     coaching_sessions: list[CoachingSession] = Field(default_factory=list)

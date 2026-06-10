@@ -19,6 +19,7 @@ from coach.data_access.interface import AccessContext, DataAccess
 from coach.schemas import (
     Account,
     AccountType,
+    Brand,
     BusinessMetric,
     CallActivity,
     CoachingSession,
@@ -46,11 +47,18 @@ CREATE TABLE accounts (
     account_id TEXT PRIMARY KEY, rep_id TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL,
     market_share REAL NOT NULL, share_trend REAL NOT NULL, volume REAL NOT NULL,
     spend REAL NOT NULL, performance TEXT NOT NULL, opportunity_level TEXT NOT NULL,
-    risk_flag INTEGER NOT NULL
+    risk_flag INTEGER NOT NULL, prp INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE account_brand_metrics (
+    account_id TEXT NOT NULL, brand TEXT NOT NULL,
+    market_share REAL NOT NULL, share_trend REAL NOT NULL, volume REAL NOT NULL,
+    spend REAL NOT NULL, performance TEXT NOT NULL, opportunity_level TEXT NOT NULL,
+    risk_flag INTEGER NOT NULL,
+    PRIMARY KEY (account_id, brand)
 );
 CREATE TABLE call_activity (
     activity_id TEXT PRIMARY KEY, rep_id TEXT NOT NULL, account_id TEXT NOT NULL,
-    period TEXT NOT NULL, calls INTEGER NOT NULL, calls_trend REAL NOT NULL
+    brand TEXT NOT NULL, period TEXT NOT NULL, calls INTEGER NOT NULL, calls_trend REAL NOT NULL
 );
 CREATE TABLE coaching_sessions (
     session_id TEXT PRIMARY KEY, rep_id TEXT NOT NULL, date TEXT NOT NULL,
@@ -87,6 +95,7 @@ class SqliteStore(DataAccess):
         for table in (
             "coaching_sessions",
             "call_activity",
+            "account_brand_metrics",
             "accounts",
             "reps",
             "users",
@@ -118,7 +127,7 @@ class SqliteStore(DataAccess):
             [(r.rep_id, r.name, r.district_id, r.tenure_months) for r in ds.reps],
         )
         cur.executemany(
-            "INSERT INTO accounts VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO accounts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 (
                     a.account_id,
@@ -132,14 +141,40 @@ class SqliteStore(DataAccess):
                     a.performance.value,
                     a.opportunity_level.value,
                     int(a.risk_flag),
+                    int(a.prp),
                 )
                 for a in ds.accounts
             ],
         )
         cur.executemany(
-            "INSERT INTO call_activity VALUES (?,?,?,?,?,?)",
+            "INSERT INTO account_brand_metrics VALUES (?,?,?,?,?,?,?,?,?)",
             [
-                (c.activity_id, c.rep_id, c.account_id, c.period, c.calls, c.calls_trend)
+                (
+                    m.account_id,
+                    m.brand.value,
+                    m.market_share,
+                    m.share_trend,
+                    m.volume,
+                    m.spend,
+                    m.performance.value,
+                    m.opportunity_level.value,
+                    int(m.risk_flag),
+                )
+                for m in ds.account_brand_metrics
+            ],
+        )
+        cur.executemany(
+            "INSERT INTO call_activity VALUES (?,?,?,?,?,?,?)",
+            [
+                (
+                    c.activity_id,
+                    c.rep_id,
+                    c.account_id,
+                    c.brand.value,
+                    c.period,
+                    c.calls,
+                    c.calls_trend,
+                )
                 for c in ds.call_activity
             ],
         )
@@ -201,6 +236,7 @@ class SqliteStore(DataAccess):
                 activity_id=r["activity_id"],
                 rep_id=r["rep_id"],
                 account_id=r["account_id"],
+                brand=Brand(r["brand"]),
                 period=r["period"],
                 calls=r["calls"],
                 calls_trend=r["calls_trend"],
@@ -247,6 +283,7 @@ class SqliteStore(DataAccess):
             "users",
             "reps",
             "accounts",
+            "account_brand_metrics",
             "call_activity",
             "coaching_sessions",
         }:
@@ -276,4 +313,5 @@ def _account(r: sqlite3.Row) -> Account:
         performance=Performance(r["performance"]),
         opportunity_level=OpportunityLevel(r["opportunity_level"]),
         risk_flag=bool(r["risk_flag"]),
+        prp=bool(r["prp"]),
     )

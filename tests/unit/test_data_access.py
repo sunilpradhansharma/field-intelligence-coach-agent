@@ -9,7 +9,7 @@ from collections import Counter
 from coach.config.settings import SIGNALS
 from coach.data_access.interface import AccessContext
 from coach.data_access.sqlite_store import SqliteStore
-from coach.schemas import Role
+from coach.schemas import AccountType, Brand, Role
 
 SEED = 42
 
@@ -99,6 +99,62 @@ def test_ranking_signals_vary_across_data():
         "missed_follow_up",
         "opportunity_risk",
     )
+
+
+# ------------------------------------------------------------------- PRP (T009)
+def test_some_hcps_are_prp_and_at_least_one_exists():
+    from coach.synthetic import generate
+
+    ds = generate(SEED)
+    prp_accounts = [a for a in ds.accounts if a.prp]
+    assert prp_accounts, "expected at least one PRP-flagged HCP (data added in T009)"
+    # PRP applies only to HCPs (prescriber data restriction), never plain accounts.
+    assert all(a.type == AccountType.hcp for a in prp_accounts)
+    # Realistic minority (well under half of all HCPs).
+    hcps = [a for a in ds.accounts if a.type == AccountType.hcp]
+    assert len(prp_accounts) < len(hcps) / 2
+
+
+def test_prp_assignment_is_deterministic_for_seed():
+    from coach.synthetic import generate
+
+    a = {acct.account_id for acct in generate(SEED).accounts if acct.prp}
+    b = {acct.account_id for acct in generate(SEED).accounts if acct.prp}
+    assert a == b and a, "PRP set must be identical and non-empty for the same seed"
+
+
+# ---------------------------------------------------------------- brands (T009)
+def test_dataset_covers_all_five_brands():
+    from coach.synthetic import generate
+
+    ds = generate(SEED)
+    brands_in_metrics = {m.brand for m in ds.account_brand_metrics}
+    assert brands_in_metrics == set(Brand), "all five brands must appear in the metrics"
+    # call activity is also per-brand and stays within the portfolio
+    assert {c.brand for c in ds.call_activity} <= set(Brand)
+
+
+def test_per_account_brand_metrics_exist_and_are_keyed():
+    from coach.synthetic import generate
+
+    ds = generate(SEED)
+    assert ds.account_brand_metrics, "expected per-(account, brand) metric rows"
+    # composite (account_id, brand) key is unique
+    keys = [(m.account_id, m.brand) for m in ds.account_brand_metrics]
+    assert len(keys) == len(set(keys))
+    # at least one account carries metrics across multiple brands
+    per_account = Counter(m.account_id for m in ds.account_brand_metrics)
+    assert any(n > 1 for n in per_account.values())
+    # every metrics row maps to a real account
+    account_ids = {a.account_id for a in ds.accounts}
+    assert all(m.account_id in account_ids for m in ds.account_brand_metrics)
+
+
+def test_brand_metrics_are_deterministic_for_seed():
+    from coach.synthetic import generate
+
+    dump = lambda ds: [m.model_dump() for m in ds.account_brand_metrics]  # noqa: E731
+    assert dump(generate(SEED)) == dump(generate(SEED))
 
 
 # ----------------------------------------------------------------- synthetic only

@@ -5,6 +5,9 @@ Produces, from a FIXED seed (repeatable):
 - each district: 1 district manager + 8-12 reps (and one shared RBD for the region);
 - each rep: 15-30 accounts/HCPs, 2-3 prior coaching sessions (a few reps get 0 — an
   edge case), plus call activity, market share, volume, spend, and opportunity/risk.
+- per-(account, brand) metrics + call activity across the five-brand portfolio (each
+  account carries 1-3 brands); a 5-10% minority of HCPs are flagged PRP (the data is
+  ADDED here — scrubbing prp=True HCPs is a later task, T008A).
 
 The four ranking signals are made to VARY across reps via per-rep "need profiles", with
 a few deliberately clear edge cases (a high-need rep, a low-need rep, a rep with no
@@ -21,7 +24,9 @@ import random
 from coach.config import get_settings
 from coach.schemas import (
     Account,
+    AccountBrandMetrics,
     AccountType,
+    Brand,
     CallActivity,
     CoachingSession,
     Dataset,
@@ -40,23 +45,16 @@ _PERIOD = "2026-05"
 # Per-profile generation parameters. Keep deterministic given the rng.
 _PROFILES = ("high", "med", "low")
 
-
-def _district_rep_count(rng: random.Random) -> int:
-    return rng.randint(8, 12)
-
-
-def _profile_for(rng: random.Random, district_idx: int, rep_idx: int, last_idx: int) -> str:
-    """Assign a need profile, forcing clear edge cases in the first district."""
-    if district_idx == 0:
-        if rep_idx == 0:
-            return "high"  # clear high-need rep
-        if rep_idx == 1:
-            return "low"  # clear low-need rep
-    # All other reps get a varied, seeded profile.
-    return rng.choice(_PROFILES)
+# Roughly 5-10% of HCPs are PRP-restricted (data ADDED here; scrubbing is T008A).
+_PRP_RATE = 0.08
 
 
-def _account_for(rng: random.Random, rep: Rep, acct_n: int, profile: str) -> Account:
+def _profile_metrics(
+    rng: random.Random, profile: str
+) -> tuple[float, OpportunityLevel, Performance, bool]:
+    """Profile-driven (share_trend, opportunity, performance, risk) — shared by the
+    account-level summary and the per-(account, brand) metrics so signal direction is
+    consistent. Deterministic given `rng`."""
     if profile == "high":
         share_trend = round(rng.uniform(-0.15, -0.03), 4)
         opp = rng.choices(
@@ -78,8 +76,35 @@ def _account_for(rng: random.Random, rep: Rep, acct_n: int, profile: str) -> Acc
         opp = rng.choice(list(OpportunityLevel))
         perf = rng.choice(list(Performance))
         risk = rng.random() < 0.25
+    return share_trend, opp, perf, risk
 
+
+def _brands_for(rng: random.Random) -> list[Brand]:
+    """1-3 distinct brands an account carries (not every account carries every brand).
+    Drawn from the `Brand` enum only — no hard-coded brand strings."""
+    return rng.sample(list(Brand), rng.randint(1, 3))
+
+
+def _district_rep_count(rng: random.Random) -> int:
+    return rng.randint(8, 12)
+
+
+def _profile_for(rng: random.Random, district_idx: int, rep_idx: int, last_idx: int) -> str:
+    """Assign a need profile, forcing clear edge cases in the first district."""
+    if district_idx == 0:
+        if rep_idx == 0:
+            return "high"  # clear high-need rep
+        if rep_idx == 1:
+            return "low"  # clear low-need rep
+    # All other reps get a varied, seeded profile.
+    return rng.choice(_PROFILES)
+
+
+def _account_for(rng: random.Random, rep: Rep, acct_n: int, profile: str) -> Account:
+    share_trend, opp, perf, risk = _profile_metrics(rng, profile)
     acct_type = rng.choices([AccountType.hcp, AccountType.account], weights=[7, 3])[0]
+    # PRP applies only to HCPs (prescriber data restriction). ~5-10% are flagged.
+    prp = acct_type == AccountType.hcp and rng.random() < _PRP_RATE
     return Account(
         account_id=f"acct_{rep.rep_id}_{acct_n:02d}",
         rep_id=rep.rep_id,
@@ -92,16 +117,42 @@ def _account_for(rng: random.Random, rep: Rep, acct_n: int, profile: str) -> Acc
         performance=perf,
         opportunity_level=opp,
         risk_flag=risk,
+        prp=prp,
     )
 
 
-def _calls_for(rng: random.Random, account: Account, profile: str, sparse: bool) -> CallActivity:
+def _brand_metrics_for(
+    rng: random.Random, account: Account, profile: str, brand: Brand
+) -> AccountBrandMetrics:
+    """Per-(account, brand) metrics, profile-consistent (data-model.md I1)."""
+    share_trend, opp, perf, risk = _profile_metrics(rng, profile)
+    return AccountBrandMetrics(
+        account_id=account.account_id,
+        brand=brand,
+        market_share=round(rng.uniform(0.05, 0.45), 4),
+        share_trend=share_trend,
+        volume=round(rng.uniform(200, 5000), 1),
+        spend=round(rng.uniform(500, 8000), 1),
+        performance=perf,
+        opportunity_level=opp,
+        risk_flag=risk,
+    )
+
+
+def _calls_for(
+    rng: random.Random,
+    account: Account,
+    profile: str,
+    sparse: bool,
+    brand: Brand,
+    opp: OpportunityLevel,
+) -> CallActivity:
     if sparse:
         calls = rng.randint(0, 1)
         calls_trend = round(rng.uniform(-0.6, -0.2), 3)
     elif profile == "high":
         # high-need: low calls especially where opportunity is high (behavior mismatch)
-        high_opp = account.opportunity_level == OpportunityLevel.high
+        high_opp = opp == OpportunityLevel.high
         calls = rng.randint(0, 2) if high_opp else rng.randint(1, 4)
         calls_trend = round(rng.uniform(-0.5, 0.0), 3)
     elif profile == "low":
@@ -111,9 +162,10 @@ def _calls_for(rng: random.Random, account: Account, profile: str, sparse: bool)
         calls = rng.randint(2, 6)
         calls_trend = round(rng.uniform(-0.2, 0.2), 3)
     return CallActivity(
-        activity_id=f"act_{account.account_id}",
+        activity_id=f"act_{account.account_id}_{brand.name}",
         rep_id=account.rep_id,
         account_id=account.account_id,
+        brand=brand,
         period=_PERIOD,
         calls=calls,
         calls_trend=calls_trend,
@@ -186,6 +238,7 @@ def generate(seed: int) -> Dataset:
 
     reps: list[Rep] = []
     accounts: list[Account] = []
+    account_brand_metrics: list[AccountBrandMetrics] = []
     call_activity: list[CallActivity] = []
     coaching_sessions: list[CoachingSession] = []
 
@@ -211,11 +264,27 @@ def generate(seed: int) -> Dataset:
             for a_n in range(1, n_accounts + 1):
                 account = _account_for(rng, rep, a_n, profile)
                 accounts.append(account)
-                call_activity.append(_calls_for(rng, account, profile, sparse))
+                # Per-(account, brand): one metrics row and one call-activity row per
+                # brand the account carries (data-model.md I1). Call activity uses that
+                # brand's opportunity so the behavior-vs-opportunity mismatch is aligned.
+                for brand in _brands_for(rng):
+                    metrics = _brand_metrics_for(rng, account, profile, brand)
+                    account_brand_metrics.append(metrics)
+                    call_activity.append(
+                        _calls_for(rng, account, profile, sparse, brand, metrics.opportunity_level)
+                    )
 
             coaching_sessions.extend(
                 _sessions_for(rng, rep, profile, no_history=(r_idx == no_history_idx))
             )
+
+    # Guarantee at least one PRP-flagged HCP exists for the fixed seed (deterministic:
+    # flag the first HCP in id order if the sampling produced none).
+    if not any(a.prp for a in accounts):
+        for a in sorted(accounts, key=lambda x: x.account_id):
+            if a.type == AccountType.hcp:
+                a.prp = True
+                break
 
     counts = {
         "regions": 1,
@@ -223,6 +292,7 @@ def generate(seed: int) -> Dataset:
         "users": len(users),
         "reps": len(reps),
         "accounts": len(accounts),
+        "account_brand_metrics": len(account_brand_metrics),
         "call_activity": len(call_activity),
         "coaching_sessions": len(coaching_sessions),
     }
@@ -233,6 +303,7 @@ def generate(seed: int) -> Dataset:
         users=users,
         reps=reps,
         accounts=accounts,
+        account_brand_metrics=account_brand_metrics,
         call_activity=call_activity,
         coaching_sessions=coaching_sessions,
     )
