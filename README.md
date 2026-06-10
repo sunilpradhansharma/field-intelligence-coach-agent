@@ -124,17 +124,14 @@ data lives. The most important rule is simple: **every part reads data through o
 door — the data-access layer.** Because everything goes through that one door, we can swap
 today's fake (synthetic) data for real data later without redoing the work above it.
 
-```mermaid
-flowchart TD
-    People["1. District manager &amp; regional business director<br/>(the people who use it)"]
-    UI["2. Web app (UI)<br/>what they see"]
-    Orch["3. Coaching brief orchestrator<br/>the coordinator that builds the brief"]
-    Builders["4. The 5 brief builders<br/>prioritize reps · coaching focus · ride-along prep · accounts &amp; business context · opener"]
-    DAL["5. Data-access layer<br/>the single shared door — RBAC enforced HERE"]
-    Stores["6. Data stores (all SYNTHETIC for the POC)<br/>SQLite / DuckDB: rep, account, activity data<br/>Notes store: coaching notes"]
+![Architecture — the layers, built vs planned](docs/diagrams/architecture.svg)
 
-    People --> UI --> Orch --> Builders --> DAL --> Stores
-```
+**Legend:** teal = built (Phase 1–2); gray = planned (Phase 3–6).
+
+The **data-access layer is the single door** every part reads through, and it is where
+**RBAC** (scope levels: self / district / region / all) and **PRP scrubbing** are enforced
+on every read. **Claude only writes the reason text** in clear language — it never decides
+or reorders the ranking, and it never reads the stores directly.
 
 - **District manager &amp; regional business director** — the people the brief is for.
 - **Web app (UI)** — the screen where they open and read the brief.
@@ -169,46 +166,48 @@ the layers above it.
 Here is the step-by-step of one morning, from the moment the DM opens the app to seeing
 the finished brief.
 
-```mermaid
-sequenceDiagram
-    participant DM as District Manager
-    participant Web as Web App
-    participant Orch as Orchestrator
-    participant DAL as Data-Access (RBAC)
-    participant DB as Data Stores
+![The morning brief flow, from request to finished brief](docs/diagrams/brief-flow.svg)
 
-    DM->>Web: 1. Open app, ask for today's coaching brief
-    Web->>Orch: 2. Send the request
-    Orch->>DAL: 3. Ask for the DM's team data
-    DAL->>DB: 4a. Read only in-scope data
-    DAL-->>Orch: 4b. Check RBAC (own district only), return in-scope data
-    Orch->>Orch: 5. Run deterministic ranking → ranked reps, each with a reason
-    DM->>Web: 6. Pick the top rep
-    Orch->>DAL: 7. Gather for that rep: coaching focus, last-time prep,<br/>key accounts + context, suggested opener (each with a reason)
-    DAL-->>Orch: in-scope details
-    Orch->>Web: 8. Assemble the one-page brief (every item shows its reason)
-    Web-->>DM: 9. Show the brief
-```
+The six steps, in plain English:
 
-The same nine steps, in plain English:
-
-1. The district manager opens the app and asks for today's coaching brief.
-2. The web app passes the request to the coordinator (orchestrator).
-3. The coordinator asks the shared data door for this manager's team data.
-4. The data door checks access rules — this manager only sees their own district — and
-   returns only the data they are allowed to see.
-5. The coordinator runs the fixed, rule-based ranking and produces a ranked list of reps,
-   each with a clear reason.
-6. The manager (or the app) picks the top rep to focus on.
-7. For that rep, the coordinator gathers the rest: what to coach, what happened last time,
-   the key accounts and how the business is doing, and a suggested way to open the talk —
-   each with its own reason.
-8. The coordinator assembles it all into one simple page where every item shows its reason.
-9. The web app shows the finished brief to the manager, who decides what to do.
+1. The DM asks for today's brief, the morning of a field ride.
+2. The data-access layer checks the DM's scope (own district only) and scrubs out any PRP
+   physicians, then returns only the data they are allowed to see. (This part is already
+   built.)
+3. The ranking engine scores the reps and produces a ranked list, each rep with a reason.
+4. The DM (or the app) picks the top rep, and the system gathers the rest for that rep:
+   coaching focus, what happened last time, key accounts with per-brand business context,
+   and a suggested opener.
+5. Claude writes the reason text in clear language — wording only. It never changes the
+   ranking.
+6. The one-page brief is assembled, with every item showing its reason, and shown to the
+   DM.
 
 **What works today vs. planned:** today only the **foundation** exists — the data-access
 layer, the data schema, and the synthetic data generator. The **orchestrator, the ranking,
 the 5 builders, and the web app are planned** in later phases (see [Phases](#phases)).
+
+---
+
+## How rep ranking works (the rollup)
+
+![Per-rep ranking rollup — many (account, brand) rows squeezed into one score per rep](docs/diagrams/ranking-rollup.svg)
+
+A rep covers many accounts, and each account can carry several brands (LUPRON PEDS,
+Synthroid, and so on). So in the data, each rep has many small rows — one per (account,
+brand) pair. To rank reps, we need one score per rep. The rollup is the step that squeezes
+those rows into one number per signal, then combines the four signals into one score.
+
+For each of the four signals — declining share, low call activity in key accounts, missed
+coaching follow-up, and opportunity/risk — we aggregate across the rep's (account, brand)
+rows into one signal value per rep. We then multiply each signal by a fixed, visible weight
+(the same weights for every rep) and add them up. That sum is the rep's score, and reps are
+ranked by score. The reason shows the top 2-3 contributing (account, brand) pairs, so the
+DM sees the real "why," not just a number.
+
+Three properties always hold: the score is deterministic (same data always gives the same
+score — the LLM does not decide it), explainable (the reason names the contributors), and
+fair (fixed weights, the same for every rep).
 
 ---
 
