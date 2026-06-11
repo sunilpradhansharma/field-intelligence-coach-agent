@@ -116,7 +116,7 @@ and tested.** `pytest` → **89 passed**. Next: Phase 5 (assembly + 5-section ru
   lazy; tests inject a fake LLM (no live Bedrock calls). Until narrated, `summary` holds the
   `PENDING_SUMMARY` placeholder (see Phase 5 requirement in §5).
 
-### Phase 4 (IN PROGRESS) — brief sections, built one at a time
+### Phase 4 (COMPLETE) — brief sections, built one at a time
 **Section 1 of 4 — coaching focus (FR-005) — tasks T026, T027 — DONE.**
 - **Deterministic focus selection** (`src/coach/components/coaching_focus.py`): the focus
   areas are decided in **pure code**, not by the LLM. A signal triggers a focus when its raw
