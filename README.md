@@ -15,11 +15,13 @@ what happened last time, which accounts matter, and how to open the conversation
 ## MVP scope
 
 > **This is a proof of concept (POC), built spec-first, using synthetic data only.**
-> Today, **Phase 1 (foundation) — including the recent PRP + brand amendment — is built
-> and tested**; later phases are planned. See [Phases](#phases) below.
+> **Phases 1–4 are complete and tested** — the data-access layer, RBAC + PRP enforcement,
+> the deterministic ranking, and all five brief sections (ranking, coaching focus, ride-along
+> prep, accounts/business context, opener). **Phase 5 (assembly, rubric, API) and Phase 6
+> (UI) are planned.** `pytest` → **89 passing**. See [Phases](#phases) below.
 >
 > 📌 **Living status & open items:** [`docs/project-status.md`](docs/project-status.md) is
-> the project's living memory (what is BUILT vs DECIDED vs OPEN, and pending questions).
+> the project's living memory — the detailed, up-to-date status, decisions, and open items.
 
 ### In scope (MVP)
 
@@ -126,7 +128,9 @@ today's fake (synthetic) data for real data later without redoing the work above
 
 ![Architecture — the layers, built vs planned](docs/diagrams/architecture.svg)
 
-**Legend:** teal = built (Phase 1–2); gray = planned (Phase 3–6).
+**Legend:** teal = built; gray = planned. (This diagram is a snapshot of the layers; for the
+current built-vs-planned status see [Phases](#phases) — the data-access layer, RBAC + PRP, the
+ranking, and all five builders are now built; the orchestrator, API, and web app are planned.)
 
 The **data-access layer is the single door** every part reads through, and it is where
 **RBAC** (scope levels: self / district / region / all) and **PRP scrubbing** are enforced
@@ -183,9 +187,10 @@ The six steps, in plain English:
 6. The one-page brief is assembled, with every item showing its reason, and shown to the
    DM.
 
-**What works today vs. planned:** today only the **foundation** exists — the data-access
-layer, the data schema, and the synthetic data generator. The **orchestrator, the ranking,
-the 5 builders, and the web app are planned** in later phases (see [Phases](#phases)).
+**What works today vs. planned:** the **data-access layer (with RBAC + PRP enforced), the
+deterministic ranking, and all five brief builders** (coaching focus, ride-along prep,
+accounts/business context, opener) are **built and tested**. The **orchestrator that
+assembles them into one brief, the API, and the web app are planned** (see [Phases](#phases)).
 
 ---
 
@@ -372,7 +377,7 @@ uv sync
 # 2. Generate the seeded synthetic dataset (repeatable; writes ./data/coach.db)
 uv run python -m coach.synthetic.generate --seed 42
 
-# 3. Run the test suite (22 tests today)
+# 3. Run the test suite (89 tests today)
 uv run pytest
 ```
 
@@ -385,64 +390,65 @@ Lint and format (optional): `uv run ruff check --fix . && uv run ruff format .`
 
 ## Phases
 
-Honest status: **only Phase 1 is Done.** Everything else is planned. Task IDs below come
-straight from `specs/001-morning-coaching-brief/tasks.md`.
+Honest status: **Phases 1–4 are Done; Phase 5 (assembly, rubric, API) is next, then Phase 6
+(UI).** `pytest` → **89 passing**. Task IDs below come straight from
+`specs/001-morning-coaching-brief/tasks.md`; the detailed, living status is in
+[`docs/project-status.md`](docs/project-status.md).
 
 ### Phase 1 — Foundation · STATUS: ✅ Done
 
-- **Goal:** the base everything else builds on.
 - **Delivers:** the data-access interface (the single seam every component reads through),
-  the data schema (with the required `reason` object), a local SQLite store, the seeded
-  synthetic data generator (1 region, 2 districts, varied ranking signals + edge cases),
-  configuration, and their tests. **Plus the PRP + brand amendment**: the `Brand` enum
-  (five brands), the `prp` flag on HCPs/accounts, and per-(account, brand) metrics
-  (`AccountBrandMetrics`); the generator now flags ~5–10% of HCPs as PRP and spreads
-  metrics across the five brands. **22 unit tests pass.**
-- **Tasks:** T001–T007, T009 (setup, config, interface, schemas, store, generator), the
-  amendment **T007A** (`prp` + brand columns + `Brand` enum) and the T009 generator
-  amendment, and the tests T018, T019.
+  the data schema (with the required `reason` object), a local SQLite store, the **`Brand`
+  enum** (five brands), the **`prp` flag** on HCPs/accounts, **per-(account, brand) metrics**
+  (`AccountBrandMetrics`), and the seeded synthetic generator (1 region, 2 districts, varied
+  ranking signals + edge cases; ~5–10% of HCPs flagged PRP; metrics spread across the five
+  brands), plus tests.
+- **Tasks:** T001–T007, T009, the amendment **T007A** (`prp` + brand columns + `Brand` enum)
+  and the T009 generator amendment, and the tests T018, T019.
 
-### Phase 2 — RBAC + PRP scrubbing · STATUS: ⏳ Planned (next)
+### Phase 2 — RBAC + PRP enforcement · STATUS: ✅ Done
 
-- **Goal:** enforce role + territory **at the data-access layer** — a DM sees only their
-  own district; the region-level role has **full access** (can take actions) — and reject
-  any out-of-scope request with a `ScopeError`. Also **scrub PRP-flagged HCPs** from every
-  read before any result reaches a field user.
-- **Delivers:** RBAC scoping wired into every store read, PRP scrubbing at the data layer,
-  plus their tests.
+- **Delivers:** **scope-level access** (self / district / region / all) enforced **at the
+  data-access layer**, with an out-of-scope read raising `ScopeError`, and **PRP scrubbing
+  on every read** (PRP-flagged HCPs never reach a field user), plus tests. Non-rep roles have
+  full access (no read-only); the role → scope-level mapping comes from one config source.
 - **Tasks:** T008 (RBAC in the data layer), T008A (PRP scrubbing), T017 (RBAC tests),
   T017A (PRP scrubbing tests).
-- **Blocked on:** confirming the exact role model (RD / RBE / Head of Sales scope) — see
-  [`docs/project-status.md`](docs/project-status.md).
 
-### Phase 3 — Deterministic ranking · STATUS: ⏳ Planned
+### Phase 3 — Deterministic ranking · STATUS: ✅ Done
 
-- **Goal:** rank reps with **fixed, visible weights** over the four business signals
-  (declining share, low call activity, missed follow-up, opportunity/risk). The ranking is
-  computed in code; **the LLM never decides or reorders it** — it only phrases the reason.
-- **Delivers:** the deterministic scorer, the separate LLM reason-narration step, and the
-  `GET /api/reps` endpoint — including the **fairness test** and the
-  **anti-LLM-ranking guard**.
-- **Tasks:** T023 (deterministic scorer), T024 (LLM narration, text only), T025 (wire +
-  `GET /api/reps`); tests T020 (scorer), T021 (golden + anti-LLM-ranking guard),
-  T022 (endpoint), T022a (fairness).
+- **Delivers:** a **pure-code scorer** over the four business signals (declining share, low
+  call activity, missed follow-up, opportunity/risk) with a **per-(account, brand) rollup**;
+  signals are **normalized to 0..1 so the config weights control influence**
+  ([ADR 0001](docs/adr/0001-signal-normalization.md)); every ranking carries a **structured
+  reason**; **LLM narration is limited to wording** — it never decides or reorders the ranking
+  (anti-LLM-ranking guard).
+- **Tasks:** T023 (deterministic scorer), T024 (LLM narration, text only); tests T020
+  (scorer/weights), T021 (golden + anti-LLM guard), T022 (explainability), T022a (fairness).
 
-### Phase 4 — Brief sections · STATUS: ⏳ Planned
+### Phase 4 — Brief sections · STATUS: ✅ Done (all four)
 
-- **Goal:** build the remaining brief sections (2–5), each with its build and test tasks.
-- **Delivers:**
-  - **Coaching focus** — 1–3 focus areas, each with a reason: T027 (build), T028 (wire),
-    T026 (test).
-  - **Ride-along prep** — RAG over coaching notes; empty state when no history: T030
-    (build), T031 (wire), T029 (test).
-  - **Accounts / business context** — key accounts, context, mismatch flags: T033 (build),
-    T034 (wire), T032 (test).
-  - **Opener** — short, suggestion-only opener; full `GET /api/brief/{rep_id}`: T036
-    (build), T037 (wire full brief), T035 (test).
+Each section: the logic is decided in **deterministic code**, every item carries a
+**structured reason**, and the **LLM writes wording only** (anti-LLM guard).
 
-### Phase 5 — Assembly, rubric, API · STATUS: ⏳ Planned
+- **Coaching focus** — 1–3 focus areas from a config catalog/thresholds, each with a reason:
+  T027 (build), T026 (test).
+- **Ride-along prep** — prior notes via the **notes retriever / RAG**
+  ([ADR 0002](docs/adr/0002-notes-retriever-rbac-prp.md): RBAC + PRP enforced at query time)
+  plus agreed actions / observe-next from the structured store; empty state when no history:
+  T010/T011 (embeddings + retriever seam), T030 (build), T029 (test).
+- **Accounts / business context** — focused key (account, brand) rows, **per-brand** context,
+  and the behaviour-vs-opportunity **mismatch flag**: T033 (build), T032 (test).
+- **Opener** — short, suggestion-only opener built from the other sections' facts: T036
+  (build), T035 (test).
 
-- **Goal:** join the sections into the full brief, prove its quality, and expose it safely.
+*(The per-section wiring/endpoint tasks — T028, T031, T034, T037 — land with the orchestrator
+and API in Phase 5.)*
+
+### Phase 5 — Assembly, rubric, API · STATUS: ⏳ Planned (next)
+
+- **Goal:** join the five sections into the full brief, prove its quality, and expose it
+  safely (incl. **narrate-before-expose** — no `PENDING_*` placeholder reaches a user).
 - **Delivers:** the LangGraph assembly and FastAPI app (T015 orchestrator + brief
   assembly, T016 API skeleton); the **5-section checklist rubric** plus the
   **consistency check** (T038); **privacy-in-logging** / audit (T040); the synthetic-only
