@@ -175,6 +175,15 @@ class Settings:
         default_factory=lambda: int(os.getenv("COACH_RANKED_REPS_MAX", "5"))
     )
 
+    # Theme aggregation (Phase 7) PRIVACY control: the smallest group size that may be reported
+    # as a raw count. Any grouping cell — a theme's total, or a per-district count — whose rep
+    # count is BELOW this is SUPPRESSED (masked, never shown as a raw small count), so an
+    # aggregate can never identify an individual (e.g. a 1-rep district; FR-016). Visible +
+    # env-overridable; it is a tunable privacy control, not a display preference.
+    aggregation_min_cell: int = field(
+        default_factory=lambda: int(os.getenv("COACH_AGGREGATION_MIN_CELL", "3"))
+    )
+
 
 def get_settings() -> Settings:
     """Return settings resolved from the current environment."""

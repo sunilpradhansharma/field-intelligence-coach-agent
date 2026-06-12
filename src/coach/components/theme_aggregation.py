@@ -5,7 +5,11 @@ A leadership roll-up of coaching themes across reps. Two invariants are the poin
 - **PATTERNS / COUNTS ONLY (FR-016):** the output exposes **no named individual reps or
   individually identifiable rep detail** — only themes with counts and shares. This is enforced
   STRUCTURALLY: the `Theme` / `ThemeAggregate` schemas have no rep-identity field, and the code
-  here only ever writes COUNTS (never a rep id) into the supporting reason.
+  here only ever writes COUNTS (never a rep id) into the supporting reason. **Small-cell
+  suppression** closes the remaining gap where a small count could identify someone (e.g. a
+  1-rep district): any grouping cell — a theme's total, or a per-district count — below
+  `Settings.aggregation_min_cell` (a config-visible, tunable privacy control) is masked, never
+  shown as a raw small count.
 - **RBAC-SCOPED to leadership:** only the **region** and **all** scope levels may aggregate, and
   only across their own region / all regions. A caller below region scope (e.g. a DM) raises
   `ScopeError` — consistent with the rest of the data-access layer (a `403`, indistinguishable
@@ -67,19 +71,44 @@ def _signal_of(focus: CoachingFocus) -> SignalName | None:
     return focus.reason.signals[0].signal if focus.reason.signals else None
 
 
-def _theme_reason(rep_count: int, total: int, share: float, by_district: Counter) -> Reason:
-    """Supporting COUNTS for a theme (explainability) — never rep identities. District ids are
-    territory, not individuals, and are in the leadership caller's scope."""
-    points = [
-        DataPoint(label="reps in scope", value=total, source=_SOURCE),
-        DataPoint(label="reps with this theme", value=rep_count, source=_SOURCE),
-        DataPoint(label="share of reps", value=share, source=_SOURCE),
-    ]
-    # Aggregate breakdown by district (counts only; deterministic order).
-    for district_id in sorted(by_district):
+def _theme_reason(rep_count: int, total: int, by_district: Counter, min_cell: int) -> Reason:
+    """Supporting COUNTS for a theme (explainability) — never rep identities, and with
+    **small-cell suppression** so no count can identify an individual (FR-016).
+
+    Suppression is applied at EVERY grouping level that could expose a small group:
+    - the theme's own total (`reps with this theme`) is masked if it is below `min_cell`;
+    - each per-district cell is shown only if it is at/above `min_cell`; cells below it are
+      collapsed into a single masked marker (no raw count, no district id).
+    The scope total (`reps in scope`) is the whole leadership scope and is never a small cell.
+    NOTE: because small cells are suppressed, the shown per-district counts may not sum to the
+    theme total — that is the intended privacy trade-off, not an inconsistency."""
+    points = [DataPoint(label="reps in scope", value=total, source=_SOURCE)]
+    if rep_count >= min_cell:
+        share = round(rep_count / total, 6) if total else 0.0
+        points.append(DataPoint(label="reps with this theme", value=rep_count, source=_SOURCE))
+        points.append(DataPoint(label="share of reps", value=share, source=_SOURCE))
+    else:
         points.append(
             DataPoint(
-                label=f"district {district_id}", value=by_district[district_id], source=_SOURCE
+                label="reps with this theme",
+                value=f"fewer than {min_cell} (suppressed)",
+                source=_SOURCE,
+            )
+        )
+    # Per-district breakdown: show only cells at/above the threshold; collapse the rest.
+    for district_id in sorted(by_district):
+        if by_district[district_id] >= min_cell:
+            points.append(
+                DataPoint(
+                    label=f"district {district_id}", value=by_district[district_id], source=_SOURCE
+                )
+            )
+    if any(c < min_cell for c in by_district.values()):
+        points.append(
+            DataPoint(
+                label=f"districts below the reporting threshold ({min_cell}) — suppressed",
+                value=f"<{min_cell} each",
+                source=_SOURCE,
             )
         )
     return Reason(summary=PENDING_SUMMARY, signals=[], data_points=points)
@@ -115,17 +144,21 @@ def aggregate_themes(
             signal_of.setdefault(focus.focus_area, _signal_of(focus))
 
     # Ranked: most common first, then theme label asc (stable, deterministic tie-break).
+    min_cell = settings.aggregation_min_cell
     themes: list[Theme] = []
     for theme in sorted(counts, key=lambda t: (-counts[t], t)):
         n = counts[theme]
-        share = round(n / total, 6) if total else 0.0
+        # Small-cell suppression (FR-016): a theme held by fewer than `min_cell` reps has its
+        # raw count + share withheld (masked) so it can't identify an individual.
+        suppressed = n < min_cell
         themes.append(
             Theme(
                 theme=theme,
                 signal=signal_of[theme],
-                rep_count=n,
-                rep_share=share,
-                reason=_theme_reason(n, total, share, by_district[theme]),
+                rep_count=None if suppressed else n,
+                rep_share=None if suppressed else (round(n / total, 6) if total else 0.0),
+                suppressed=suppressed,
+                reason=_theme_reason(n, total, by_district[theme], min_cell),
             )
         )
 

@@ -11,6 +11,8 @@ the anti-LLM guard (narration changes only `reason.summary`), and explainability
 every theme). Uses a FakeLLM — no live Bedrock.
 """
 
+from dataclasses import replace
+
 import pytest
 
 from coach.components.coaching_focus import coaching_focus_for_rep
@@ -72,6 +74,12 @@ def _self_ctx() -> AccessContext:
     return AccessContext(user_id="rep_d1_001", role=Role.rep, region_id="R1", rep_id="rep_d1_001")
 
 
+def _raw_settings():
+    """Settings with suppression OFF (min cell = 1) so a test sees the true raw counts. Used by
+    the aggregation goldens; suppression itself is exercised by the dedicated tests below."""
+    return replace(get_settings(), aggregation_min_cell=1)
+
+
 @pytest.fixture
 def store():
     s = SqliteStore(":memory:")
@@ -102,12 +110,14 @@ GOLDEN_THEMES = [
 
 
 def test_golden_themes_counts_and_order(store):
-    agg = aggregate_themes(_region_ctx(), store)
+    # Raw counts (suppression off) so the golden checks the aggregation itself.
+    agg = aggregate_themes(_region_ctx(), store, _raw_settings())
     assert agg.rep_count == 17
     assert agg.generated_for.scope == "R1"
     assert agg.generated_for.scope_level.value == "region"
     got = [(t.theme, t.signal, t.rep_count, t.rep_share) for t in agg.themes]
     assert got == GOLDEN_THEMES
+    assert all(t.suppressed is False for t in agg.themes)
 
 
 def test_aggregation_is_deterministic(store):
@@ -131,14 +141,17 @@ def test_output_exposes_no_individual_rep_detail(store):
     for rep in ds.reps:
         assert rep.rep_id not in blob, f"leaked rep id {rep.rep_id}"
         assert rep.name not in blob, f"leaked rep name {rep.name}"
-    # What it DOES carry is counts/shares only.
+    # What it DOES carry is counts/shares only — and a suppressed small group masks them to None.
     for t in agg.themes:
-        assert isinstance(t.rep_count, int) and 0.0 <= t.rep_share <= 1.0
+        if t.suppressed:
+            assert t.rep_count is None and t.rep_share is None
+        else:
+            assert isinstance(t.rep_count, int) and 0.0 <= t.rep_share <= 1.0
 
 
 # ------------------------------------------------------------- explainability (P7-T1, FR-010)
 def test_every_theme_has_a_reason_with_counts(store):
-    agg = aggregate_themes(_region_ctx(), store)
+    agg = aggregate_themes(_region_ctx(), store, _raw_settings())
     assert agg.themes
     for t in agg.themes:
         assert t.reason.summary  # non-empty (pending placeholder pre-narration is non-empty)
@@ -152,7 +165,7 @@ def test_every_theme_has_a_reason_with_counts(store):
 
 # --------------------------------------------------------------- same source as per-rep section
 def test_themes_use_the_same_focus_catalog_as_the_per_rep_section(store):
-    settings = get_settings()
+    settings = _raw_settings()  # raw counts so the roll-up comparison is exact
     ctx = _region_ctx()
     # Independently tally each in-scope rep's coaching focuses (the per-rep section) ...
     expected: dict[str, int] = {}
@@ -160,7 +173,7 @@ def test_themes_use_the_same_focus_catalog_as_the_per_rep_section(store):
         for fa in {f.focus_area for f in coaching_focus_for_rep(ctx, store, rep.rep_id, settings)}:
             expected[fa] = expected.get(fa, 0) + 1
     # ... and assert the aggregation is exactly that roll-up (no second, drifting definition).
-    agg = aggregate_themes(ctx, store)
+    agg = aggregate_themes(ctx, store, settings)
     assert {t.theme: t.rep_count for t in agg.themes} == expected
     # Every theme label is a real catalog focus area (or the default) — never invented.
     catalog = set(settings.focus_catalog.values()) | {DEFAULT_FOCUS_AREA}
@@ -193,13 +206,15 @@ def test_narration_changes_only_summary(store):
     narrated = narrate_themes(themes, fake)
 
     assert len(fake.calls) == len(themes)
-    # The LLM was handed counts/shares only — never a rep identity.
-    ds = generate(SEED)
-    rep_ids = {r.rep_id for r in ds.reps}
-    for call in fake.calls:
-        import json
+    # The LLM was handed counts/shares only — never a rep identity. SUBSTRING check (airtight:
+    # catches an id even if it is not whitespace-separated).
+    import json
 
-        assert not (rep_ids & set(json.dumps(call).split()))  # no rep id token in the LLM input
+    ds = generate(SEED)
+    for call in fake.calls:
+        blob = json.dumps(call)
+        for rep in ds.reps:
+            assert rep.rep_id not in blob and rep.name not in blob
 
     for before, after in zip(themes, narrated, strict=True):
         b, a = before.model_dump(), after.model_dump()
@@ -292,11 +307,12 @@ def test_region_caller_cannot_aggregate_another_region():
     store.write_dataset(_two_region_dataset(b_declining=False))
     declining = "Defend and regrow share at key accounts"
 
+    raw = _raw_settings()  # raw counts so isolation is checked on the numbers, not suppression
     r1 = aggregate_themes(
-        AccessContext(user_id="x", role=Role.regional_director, region_id="R1"), store
+        AccessContext(user_id="x", role=Role.regional_director, region_id="R1"), store, raw
     )
     r2 = aggregate_themes(
-        AccessContext(user_id="y", role=Role.regional_director, region_id="R2"), store
+        AccessContext(user_id="y", role=Role.regional_director, region_id="R2"), store, raw
     )
     counts_r1 = {t.theme: t.rep_count for t in r1.themes}
     counts_r2 = {t.theme: t.rep_count for t in r2.themes}
@@ -306,7 +322,7 @@ def test_region_caller_cannot_aggregate_another_region():
 
     # "all" sees both regions (4 reps; declining across both).
     all_agg = aggregate_themes(
-        AccessContext(user_id="h", role=Role.head_of_sales, region_id="R1"), store
+        AccessContext(user_id="h", role=Role.head_of_sales, region_id="R1"), store, raw
     )
     assert all_agg.rep_count == 4
     assert {t.theme: t.rep_count for t in all_agg.themes}[declining] == 2
@@ -319,9 +335,132 @@ def test_changing_the_data_changes_counts_predictably():
     store.write_dataset(_two_region_dataset(b_declining=True))
     declining = "Defend and regrow share at key accounts"
     r1 = aggregate_themes(
-        AccessContext(user_id="x", role=Role.regional_director, region_id="R1"), store
+        AccessContext(user_id="x", role=Role.regional_director, region_id="R1"),
+        store,
+        _raw_settings(),
     )
     counts = {t.theme: t.rep_count for t in r1.themes}
     assert counts[declining] == 2
     assert DEFAULT_FOCUS_AREA not in counts  # no rep left without a triggered theme
+    store.close()
+
+
+# ---------------------------------------- small-cell suppression (FIX 1 / FR-016, P7-T1/T2)
+_DECLINING = "Defend and regrow share at key accounts"
+_LOW_CALL = "Improve account prioritization and call planning"
+
+
+def _low_call_bundle(rep_id: str, district: str):
+    """A rep that triggers ONLY low_call_activity (high opportunity + zero calls; no share drop)."""
+    rep = Rep(rep_id=rep_id, name=f"Rep {rep_id}", district_id=district, tenure_months=12)
+    acct = Account(
+        account_id=f"a_{rep_id}",
+        rep_id=rep_id,
+        name=f"Acct {rep_id}",
+        type=AccountType.account,
+        market_share=0.2,
+        share_trend=0.0,
+        volume=100.0,
+        spend=100.0,
+        performance=Performance.on,
+        opportunity_level=OpportunityLevel.high,
+        risk_flag=False,
+        prp=False,
+    )
+    abm = AccountBrandMetrics(
+        account_id=acct.account_id,
+        brand=Brand.lupron_peds,
+        market_share=0.2,
+        share_trend=0.0,
+        volume=100.0,
+        spend=100.0,
+        performance=Performance.on,
+        opportunity_level=OpportunityLevel.high,
+        risk_flag=False,
+    )
+    call = CallActivity(
+        activity_id=f"c_{rep_id}",
+        rep_id=rep_id,
+        account_id=acct.account_id,
+        brand=Brand.lupron_peds,
+        period="2026-05",
+        calls=0,
+        calls_trend=0.0,
+    )
+    return rep, acct, abm, call
+
+
+def _suppression_dataset() -> Dataset:
+    """One region R1: district D1 = 4 declining + 1 low-call rep; district D2 = 1 declining rep.
+    So (min_cell 3): declining total 5 (D1=4 large, D2=1 small); low_call total 1 (a rare theme)."""
+    bundles = [_rep_bundle(f"r1_d1_{i}", "D1", True) for i in range(4)]
+    bundles.append(_low_call_bundle("r1_d1_lc", "D1"))
+    bundles.append(_rep_bundle("r1_d2_0", "D2", True))
+    reps, accts, abms, calls = [], [], [], []
+    for rep, a, m, c in bundles:
+        reps.append(rep)
+        accts.append(a)
+        abms.append(m)
+        calls.append(c)
+    return Dataset(
+        meta=GenerationMeta(seed=0, counts={}),
+        regions=[Region(region_id="R1", name="R1")],
+        districts=[
+            District(district_id="D1", region_id="R1", name="D1"),
+            District(district_id="D2", region_id="R1", name="D2"),
+        ],
+        users=[],
+        reps=reps,
+        accounts=accts,
+        account_brand_metrics=abms,
+        call_activity=calls,
+        coaching_sessions=[],
+    )
+
+
+def test_small_cells_are_suppressed_by_default():
+    store = SqliteStore(":memory:")
+    store.write_dataset(_suppression_dataset())
+    agg = aggregate_themes(_region_ctx(), store)  # default min_cell = 3
+    themes = {t.theme: t for t in agg.themes}
+
+    # A large theme is shown with its raw count, but its small (D2=1) district cell is suppressed.
+    d = themes[_DECLINING]
+    assert d.suppressed is False and d.rep_count == 5
+    d_labels = {dp.label: dp.value for dp in d.reason.data_points}
+    assert d_labels.get("district D1") == 4  # >= threshold: shown
+    assert "district D2" not in d_labels  # < threshold: never shown as a raw cell
+    assert any("suppressed" in lbl for lbl in d_labels)  # masked marker present instead
+
+    # A rare theme (total below threshold) is suppressed at the theme level — count masked.
+    lc = themes[_LOW_CALL]
+    assert lc.suppressed is True and lc.rep_count is None and lc.rep_share is None
+    lc_labels = {dp.label: dp.value for dp in lc.reason.data_points}
+    assert lc_labels["reps with this theme"] == "fewer than 3 (suppressed)"
+
+    # No suppressed small count (1) leaks as a raw labeled cell anywhere in the output.
+    for t in agg.themes:
+        for dp in t.reason.data_points:
+            if dp.label.startswith("district "):
+                assert isinstance(dp.value, int) and dp.value >= 3
+    store.close()
+
+
+def test_changing_the_threshold_changes_what_is_suppressed():
+    store = SqliteStore(":memory:")
+    store.write_dataset(_suppression_dataset())
+
+    # min_cell = 1: nothing suppressed — the small cells now appear.
+    raw = aggregate_themes(_region_ctx(), store, replace(get_settings(), aggregation_min_cell=1))
+    tr = {t.theme: t for t in raw.themes}
+    assert tr[_LOW_CALL].suppressed is False and tr[_LOW_CALL].rep_count == 1
+    assert {dp.label: dp.value for dp in tr[_DECLINING].reason.data_points}.get("district D2") == 1
+
+    # min_cell = 5: the once-shown D1=4 cell now also falls below the threshold -> suppressed.
+    strict = aggregate_themes(_region_ctx(), store, replace(get_settings(), aggregation_min_cell=5))
+    ts = {t.theme: t for t in strict.themes}
+    d_labels = {dp.label: dp.value for dp in ts[_DECLINING].reason.data_points}
+    assert "district D1" not in d_labels and "district D2" not in d_labels
+    assert any("suppressed" in lbl for lbl in d_labels)
+    assert ts[_LOW_CALL].suppressed is True
     store.close()

@@ -347,8 +347,11 @@ class Theme(BaseModel):
         str  # the focus-area / theme label (from the config catalog — same as the per-rep section)
     )
     signal: SignalName | None = None  # the signal it maps to (None = the no-gap default theme)
-    rep_count: int  # how many in-scope reps have this theme
-    rep_share: float  # rep_count / total in-scope reps (0..1)
+    # how many in-scope reps have this theme — `None` when SUPPRESSED (the group is smaller than
+    # `Settings.aggregation_min_cell`, so the raw count is withheld for privacy, FR-016).
+    rep_count: int | None
+    rep_share: float | None  # rep_count / total in-scope reps (0..1); `None` when suppressed
+    suppressed: bool = False  # True when the group is too small to report a raw count
     reason: Reason  # supporting counts (no rep identities); summary narrated by the LLM
 
 
