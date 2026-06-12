@@ -15,13 +15,13 @@ what happened last time, which accounts matter, and how to open the conversation
 ## MVP scope
 
 > **This is a proof of concept (POC), built spec-first, using synthetic data only.**
-> **The MVP — the morning coaching brief — is now FEATURE-COMPLETE end to end (all six phases
-> built and tested):** synthetic data → the RBAC/PRP data-access layer → the deterministic
-> ranking → the five brief sections → the orchestrated, narrated, validated brief → the
-> read-only API → the minimal web UI. `pytest` → **125 passing**. See [Phases](#phases) below.
-> The remaining items are **future enhancements, not MVP gaps** (the CLOSE capture capability,
-> Summit ranking optimization, leadership theme aggregation, real data-source connectors, and a
-> perf/latency test).
+> **The MVP — the morning coaching brief — is built and tested end to end (all six phases):**
+> synthetic data → the RBAC/PRP data-access layer → the deterministic ranking → the five brief
+> sections → the orchestrated, narrated, validated brief → the read-only API → the minimal web
+> UI. `pytest` → **129 passing**. The **architecture and flow diagrams show the complete target
+> system**; the [Roadmap](#roadmap) below shows **what is built today versus planned next**
+> (theme aggregation, Summit optimization, covariant analysis, and verbal-feedback / CLOSE
+> capture are planned capabilities, not MVP gaps).
 >
 > 📌 **Living status & open items:** [`docs/project-status.md`](docs/project-status.md) is
 > the project's living memory — the detailed, up-to-date status, decisions, and open items.
@@ -129,18 +129,15 @@ data lives. The most important rule is simple: **every part reads data through o
 door — the data-access layer.** Because everything goes through that one door, we can swap
 today's fake (synthetic) data for real data later without redoing the work above it.
 
-![Architecture — the layers, built vs planned](docs/diagrams/architecture.svg)
+![Complete target architecture for the field intelligence coach](docs/diagrams/architecture.svg)
 
-**Legend:** teal = built; gray = planned. (This diagram is an earlier snapshot of the layers.
-**Status update: all of these layers are now built** — the data-access layer, RBAC + PRP, the
-ranking, all five builders, the orchestrator, the read-only API, and the web app — so the
-gray "planned" shading is out of date; a refreshed diagram is coming. For the current
-built-vs-planned status see [Phases](#phases).)
+*Complete target architecture — the full system with every capability. See
+[Roadmap](#roadmap) for what is built today.*
 
-The **data-access layer is the single door** every part reads through, and it is where
-**RBAC** (scope levels: self / district / region / all) and **PRP scrubbing** are enforced
-on every read. **Claude only writes the reason text** in clear language — it never decides
-or reorders the ranking, and it never reads the stores directly.
+The **data-access layer is the single door** every part reads and writes through, and it is
+where **RBAC** (scope levels: self / district / region / all) and **PRP scrubbing** are
+enforced on **every read**. **Claude only writes the wording** (the reason text in clear
+language) — it never decides or reorders the ranking, and it never touches the stores directly.
 
 - **District manager &amp; regional business director** — the people the brief is for.
 - **Web app (UI)** — the screen where they open and read the brief.
@@ -173,34 +170,41 @@ the layers above it.
 ## What happens when a manager uses it (the flow)
 
 Here is the step-by-step of one morning, from the moment the DM opens the app to seeing
-the finished brief.
+the finished brief — and the matching CLOSE step after the ride.
 
-![The morning brief flow, from request to finished brief](docs/diagrams/brief-flow.svg)
+![The full coaching loop — OPEN morning brief and CLOSE after the ride, with the two safety gates](docs/diagrams/flow-detailed.svg)
 
-The six steps, in plain English:
+*The full coaching loop — OPEN (morning brief) and CLOSE (record after the ride). Two
+safety gates: rep-in-scope, and narrate-before-expose (no half-written brief is ever shown).*
+
+The OPEN (morning brief) in plain English:
 
 1. The DM asks for today's brief, the morning of a field ride.
 2. The data-access layer checks the DM's scope (own district only) and scrubs out any PRP
-   physicians, then returns only the data they are allowed to see.
+   physicians, then returns only the data they are allowed to see. **(Gate 1: rep-in-scope.)**
 3. The ranking engine scores the reps and produces a ranked list, each rep with a reason.
 4. The DM (or the app) picks the top rep, and the system gathers the rest for that rep:
    coaching focus, what happened last time, key accounts with per-brand business context,
    and a suggested opener.
 5. Claude writes the reason text in clear language — wording only. It never changes the
    ranking.
-6. The one-page brief is assembled, with every item showing its reason, and shown to the
-   DM.
+6. The brief is assembled and validated before anything is shown: if any section is still
+   un-narrated it is never returned. **(Gate 2: narrate-before-expose.)** The one-page brief,
+   every item showing its reason, is shown to the DM.
 
-**This whole flow is now built and tested.** The **data-access layer (with RBAC + PRP
-enforced), the deterministic ranking, all five brief builders** (coaching focus, ride-along
-prep, accounts/business context, opener), the **orchestrator that assembles them into one
-brief, the read-only API, and the web app** are all in place (see [Phases](#phases)).
+**The OPEN morning brief is built and tested end to end** — the data-access layer (RBAC + PRP
+enforced), the deterministic ranking, all five brief builders, the orchestrator, the read-only
+API, and the web UI. The **CLOSE** half of the loop (recording observations after the ride —
+the first write path) is **planned** (Phase 10); see the [Roadmap](#roadmap).
 
 ---
 
 ## How rep ranking works (the rollup)
 
 ![Per-rep ranking rollup — many (account, brand) rows squeezed into one score per rep](docs/diagrams/ranking-rollup.svg)
+
+*How rep ranking rolls up the signals — many (account, brand) rows become one normalized,
+weighted score per rep, with the top contributors kept for the reason.*
 
 A rep covers many accounts, and each account can carry several brands (LUPRON PEDS,
 Synthroid, and so on). So in the data, each rep has many small rows — one per (account,
@@ -220,17 +224,29 @@ fair (fixed weights, the same for every rep).
 
 ---
 
+## Who calls whom (the sequence)
+
+The same morning, viewed as messages between the parts — the API resolves the caller's
+identity into a scope, the orchestrator runs the builders through the single data-access
+door, and the assembled brief comes back.
+
+![Sequence — who calls whom to build and close a brief](docs/diagrams/sequence.svg)
+
+*Who calls whom to build and close a brief — solid = request, dashed = response.*
+
+---
+
 ## Technical architecture
 
 For engineers, a detailed technical reference lives in
-**[docs/technical-architecture.md](docs/technical-architecture.md)**. It covers the package
-map under `src/coach/`, the data-access seam (`DataAccess`/`Retriever` Protocols,
+**[docs/technical-architecture.md](docs/technical-architecture.md)**. It walks the
+**complete target architecture** layer by layer (matching the diagram above), plus the
+package map under `src/coach/`, the data-access seam (`DataAccess`/`Retriever` Protocols,
 `AccessContext`, `ScopeError`), the data model, the LangGraph orchestration and the
 deterministic ranking, the coaching-notes RAG, LLM integration, the explainability
-contract, security/privacy, the testing strategy, and the POC→AWS production mapping.
-(That doc still labels some layers by their original build phase and is being refreshed now
-that all six phases are built — the README [Phases](#phases) section below is the current
-source of truth.)
+contract, security/privacy, and the POC→AWS production mapping. For what is built today
+versus planned next, the [Roadmap](#roadmap) above and
+[`docs/project-status.md`](docs/project-status.md) are the source of truth.
 
 ---
 
@@ -245,7 +261,7 @@ source of truth.)
 - **Stores (MVP):** SQLite / DuckDB for structured data; an in-memory vector store for the
   coaching-notes RAG (→ FAISS / Chroma / Bedrock Knowledge Bases in production)
 - **Validation:** Pydantic schemas (including the structured `Reason` object)
-- **Tests:** pytest — unit, component, and end-to-end (125 tests)
+- **Tests:** pytest — unit, component, and end-to-end (129 tests)
 - **Tooling:** `uv` for environments/deps; `ruff` for lint + format
 
 ---
@@ -383,7 +399,7 @@ uv sync
 # 2. Generate the seeded synthetic dataset (repeatable; writes ./data/coach.db)
 uv run python -m coach.synthetic.generate --seed 42
 
-# 3. Run the test suite (125 tests)
+# 3. Run the test suite (129 tests)
 uv run pytest
 ```
 
@@ -405,12 +421,25 @@ serve the same read-only page at `/`.
 
 ---
 
-## Phases
+## Roadmap
 
-Honest status: **all six phases are Done — the MVP is feature-complete end to end.**
-`pytest` → **125 passing**. Task IDs below come straight from
-`specs/001-morning-coaching-brief/tasks.md`; the detailed, living status is in
-[`docs/project-status.md`](docs/project-status.md).
+**Phases 1–6 — the morning coaching brief: ✅ Done, tested end to end** (`pytest` → **129
+passing**). **Phases 7–10 — planned next capabilities** (numbered by capability — the next
+steps, not MVP gaps). The architecture and flow diagrams above show the *complete target*
+system; this roadmap shows what is built today versus planned next.
+
+| Phase | Scope | Status |
+|---|---|---|
+| **Phases 1–6** | **The morning coaching brief** — synthetic data → RBAC/PRP data-access → deterministic ranking → the five sections → orchestrated, narrated, validated brief → read-only API → web UI | ✅ **Done** |
+| **Phase 7** | **Theme aggregation** (capability #6) — read across reps to surface common coaching themes for a leadership view | ⏳ Planned |
+| **Phase 8** | **Summit optimization** (capability #5) — add Summit / IC-plan logic as a ranking signal; configurable per team | ⏳ Planned |
+| **Phase 9** | **Covariant analysis** (capability #4) — deeper insight in the accounts section; needs a defined "success" measure | ⏳ Planned |
+| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — record observations after the ride; the first write path; closes the loop | ⏳ Planned |
+
+Task IDs for the built phases come straight from `specs/001-morning-coaching-brief/tasks.md`;
+the detailed, living build status is in [`docs/project-status.md`](docs/project-status.md).
+
+*The built phases (1–6) in detail:*
 
 ### Phase 1 — Foundation · STATUS: ✅ Done
 
@@ -492,23 +521,23 @@ and API in Phase 5.)*
 
 ---
 
-> ✅ **MVP feature-complete (Phases 1–6).** The morning coaching brief runs end to end:
-> synthetic data → RBAC/PRP data-access → deterministic ranking → the five sections →
-> orchestrated, narrated, validated brief → read-only API → web UI. The items below are
-> **future enhancements, not MVP gaps.**
+### Phases 7–10 (planned) — next capabilities
 
-### Future enhancements (not MVP gaps)
+These extend the same architecture (and the complete-target diagram above); none is a gap in
+the morning-brief MVP.
 
-- **The CLOSE capture capability** — the end-of-session coaching moment (observations + areas of
-  focus/development), alongside the OPEN morning brief. Needs its own spec; informed by an
-  upcoming coaching workshop (~60 min with a few DMs and RDs).
-- **Summit ranking optimization** — fold Summit/IC-plan logic into prioritization (configurable
-  per team).
-- **Leadership theme aggregation** — roll-ups of coaching themes across districts/regions for
-  leadership (the MVP deliberately has no cross-district aggregation).
-- **Real data-source connectors** — swap the synthetic stores for real connectors (Veeva, IQVIA,
-  Aurora/Athena, Bedrock Knowledge Bases) behind the same data-access interface.
-- **Performance / latency test (SC-001)** — a dedicated perf check, deferred for the MVP.
+- **Phase 7 — theme aggregation (capability #6):** read *across* reps to surface common
+  coaching themes, for a leadership view. A new read direction behind the same data-access door.
+- **Phase 8 — Summit optimization (capability #5):** add Summit / IC-plan logic as a new
+  ranking signal, configurable per team (each team's plan differs).
+- **Phase 9 — covariant analysis (capability #4):** deeper insight in the accounts section —
+  which factors move together with results; needs a defined "success" measure first.
+- **Phase 10 — verbal feedback / CLOSE capture (capability #2):** record observations after
+  the ride — the first **write** path — closing the OPEN→CLOSE loop.
+
+Also planned (cross-cutting, not numbered capabilities): **real data-source connectors** (swap
+the synthetic stores for Veeva / IQVIA / Aurora / Athena / Bedrock Knowledge Bases behind the
+same data-access interface) and a **performance / latency test** (SC-001, deferred for the MVP).
 
 ---
 

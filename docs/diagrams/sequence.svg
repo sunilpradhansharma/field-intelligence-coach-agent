@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 800" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Swimlane sequence of the Field Intelligence Coach Agent showing messages between UI, API, orchestrator, data-access, stores and Claude">
+  <style>
+    .bg{fill:#FAF8F3}
+    .title{fill:#2A2622;font-size:18px;font-weight:700}
+    .subtitle{fill:#6B655C;font-size:11px}
+    .lane{fill:#2A2622;font-size:12px;font-weight:600}
+    .life{stroke:#C7C1B6;stroke-width:1.4;stroke-dasharray:4 5}
+    .card{fill:#EDEFEE;stroke:#707A76;stroke-width:1}
+    .exp{fill:#E6EEF3;stroke:#5A7689;stroke-width:1}
+    .door{fill:#D7E9E1;stroke:#2E7D6B;stroke-width:1.4}
+    .ai{fill:#F3ECE2;stroke:#A98C66;stroke-width:1}
+    .self{fill:#F4F2ED;stroke:#9A9388;stroke-width:1}
+    .selftxt{fill:#5C564D;font-size:8.5px}
+    .msg{stroke:#5A6B66;stroke-width:1.5;fill:none}
+    .ret{stroke:#8A8378;stroke-width:1.4;fill:none;stroke-dasharray:5 4}
+    .mt{fill:#2A2622;font-size:9.5px}
+    .rt{fill:#6B655C;font-size:9.5px;font-style:italic}
+    .section{fill:#8A8378;font-size:11px;font-weight:700}
+    .div{stroke:#C7C1B6;stroke-width:1;stroke-dasharray:4 4}
+  </style>
+  <rect class="bg" x="0" y="0" width="1180" height="800"/>
+  <defs>
+    <marker id="m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M2 2 L8 5 L2 8 Z" fill="#5A6B66"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 2 L8 5 L2 8" fill="none" stroke="#8A8378" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+
+  <text class="title" x="590" y="30" text-anchor="middle">Sequence — who calls whom to build and close a brief</text>
+  <text class="subtitle" x="590" y="48" text-anchor="middle">time flows down · solid = request, dashed = response</text>
+
+  <!-- lifelines -->
+  <line class="life" x1="130" y1="100" x2="130" y2="772"/>
+  <line class="life" x1="320" y1="100" x2="320" y2="772"/>
+  <line class="life" x1="510" y1="100" x2="510" y2="772"/>
+  <line class="life" x1="700" y1="100" x2="700" y2="772"/>
+  <line class="life" x1="890" y1="100" x2="890" y2="772"/>
+  <line class="life" x1="1080" y1="100" x2="1080" y2="772"/>
+
+  <!-- lane headers -->
+  <rect class="exp" x="55" y="58" width="150" height="42" rx="7"/>
+  <text class="lane" x="130" y="84" text-anchor="middle">DM / UI</text>
+  <rect class="card" x="245" y="58" width="150" height="42" rx="7"/>
+  <text class="lane" x="320" y="84" text-anchor="middle">API</text>
+  <rect class="card" x="435" y="58" width="150" height="42" rx="7"/>
+  <text class="lane" x="510" y="84" text-anchor="middle">Orchestrator</text>
+  <rect class="door" x="625" y="58" width="150" height="42" rx="7"/>
+  <text class="lane" x="700" y="84" text-anchor="middle">Data-access</text>
+  <rect class="card" x="815" y="58" width="150" height="42" rx="7"/>
+  <text class="lane" x="890" y="84" text-anchor="middle">Stores / Retriever</text>
+  <rect class="ai" x="1005" y="58" width="150" height="42" rx="7"/>
+  <text class="lane" x="1080" y="84" text-anchor="middle">Claude / Bedrock</text>
+
+  <!-- OPEN messages -->
+  <line class="msg" x1="130" y1="132" x2="320" y2="132" marker-end="url(#m)"/>
+  <text class="mt" x="225" y="125" text-anchor="middle">request brief (identity)</text>
+
+  <rect class="self" x="235" y="147" width="170" height="22" rx="5"/>
+  <text class="selftxt" x="320" y="161" text-anchor="middle">resolve identity → AccessContext</text>
+
+  <line class="msg" x1="320" y1="192" x2="510" y2="192" marker-end="url(#m)"/>
+  <text class="mt" x="415" y="185" text-anchor="middle">build brief (ctx)</text>
+
+  <line class="msg" x1="510" y1="226" x2="700" y2="226" marker-end="url(#m)"/>
+  <text class="mt" x="605" y="219" text-anchor="middle">get reps + metrics (ctx)</text>
+
+  <line class="msg" x1="700" y1="260" x2="890" y2="260" marker-end="url(#m)"/>
+  <text class="mt" x="795" y="253" text-anchor="middle">query (scope + PRP)</text>
+
+  <line class="ret" x1="890" y1="294" x2="700" y2="294" marker-end="url(#r)"/>
+  <text class="rt" x="795" y="287" text-anchor="middle">clean rows</text>
+
+  <line class="ret" x1="700" y1="328" x2="510" y2="328" marker-end="url(#r)"/>
+  <text class="rt" x="605" y="321" text-anchor="middle">in-scope, PRP-clean data</text>
+
+  <rect class="self" x="425" y="343" width="170" height="22" rx="5"/>
+  <text class="selftxt" x="510" y="357" text-anchor="middle">rank (deterministic, in code)</text>
+
+  <line class="msg" x1="510" y1="388" x2="890" y2="388" marker-end="url(#m)"/>
+  <text class="mt" x="700" y="381" text-anchor="middle">retrieve notes (ctx)</text>
+
+  <line class="ret" x1="890" y1="422" x2="510" y2="422" marker-end="url(#r)"/>
+  <text class="rt" x="700" y="415" text-anchor="middle">scoped, PRP-clean notes</text>
+
+  <line class="msg" x1="510" y1="456" x2="1080" y2="456" marker-end="url(#m)"/>
+  <text class="mt" x="795" y="449" text-anchor="middle">narrate sections (wording only)</text>
+
+  <line class="ret" x1="1080" y1="490" x2="510" y2="490" marker-end="url(#r)"/>
+  <text class="rt" x="795" y="483" text-anchor="middle">summaries (text only)</text>
+
+  <rect class="self" x="420" y="505" width="180" height="22" rx="5"/>
+  <text class="selftxt" x="510" y="519" text-anchor="middle">assemble + narrate-before-expose</text>
+
+  <line class="ret" x1="510" y1="550" x2="320" y2="550" marker-end="url(#r)"/>
+  <text class="rt" x="415" y="543" text-anchor="middle">CoachingBrief</text>
+
+  <line class="ret" x1="320" y1="584" x2="130" y2="584" marker-end="url(#r)"/>
+  <text class="rt" x="225" y="577" text-anchor="middle">brief — every item has a reason</text>
+
+  <!-- CLOSE -->
+  <line class="div" x1="40" y1="610" x2="1140" y2="610"/>
+  <text class="section" x="40" y="626" text-anchor="start">CLOSE — after the ride</text>
+
+  <line class="msg" x1="130" y1="650" x2="320" y2="650" marker-end="url(#m)"/>
+  <text class="mt" x="225" y="643" text-anchor="middle">submit CLOSE (voice)</text>
+
+  <line class="msg" x1="320" y1="684" x2="1080" y2="684" marker-end="url(#m)"/>
+  <text class="mt" x="700" y="677" text-anchor="middle">transcribe + structure notes</text>
+
+  <line class="msg" x1="320" y1="718" x2="700" y2="718" marker-end="url(#m)"/>
+  <text class="mt" x="510" y="711" text-anchor="middle">write close (ctx)</text>
+
+  <line class="msg" x1="700" y1="752" x2="890" y2="752" marker-end="url(#m)"/>
+  <text class="mt" x="795" y="745" text-anchor="middle">save (scoped)</text>
+</svg>

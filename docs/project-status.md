@@ -28,7 +28,8 @@ synthetic.
 **Phases 1–6 are COMPLETE and tested — the MVP (the morning coaching brief) is now
 FEATURE-COMPLETE end to end:** synthetic data → RBAC/PRP data-access layer → deterministic
 ranking → the five brief sections → the orchestrated, narrated, validated brief → the read-only
-FastAPI API → the read-only web UI. `pytest` → **125 passed**.
+FastAPI API → the read-only web UI. `pytest` → **129 passed**. Phases 7–10 (theme aggregation,
+Summit optimization, covariant analysis, verbal-feedback / CLOSE) are PLANNED.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -588,13 +589,28 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 4** | The **five brief sections**: (1) coaching focus ✅ T026/T027; (2) ride-along prep ✅ (T010/T011 + T029/T030); (3) accounts + per-brand context ✅ T032/T033; (4) opener ✅ T035/T036 | **DONE** (all five sections) |
 | **Phase 5** | **Assembly + rubric + API.** **Step 5a** ✅ — the fixed-DAG **orchestrator + brief assembly + 5-section checklist rubric** (T015, T028, T031, T034, T038; ADR 0003). **Step 5b** ✅ — the **read-only FastAPI API** (T014, T016, T025, T037, T040): GET-only, identity→scope-from-config, per-request connection, FR-014 403, PRP-safe, privacy-safe logging | **DONE** (both steps) |
 | **Phase 6** | **UI** (T039) — minimal read-only web page rendering the 5 sections + each reason; seeded-user selector (API enforces scope); per-brand accounts + mismatch; clean 403/empty states; offline demo server | **DONE** |
-| **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
+| **Phase 7** | **Theme aggregation** (capability #6) — read across reps to surface common coaching themes; leadership dashboard view | **PLANNED** (next) |
+| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan logic as a new ranking signal; configurable per team | **PLANNED** |
+| **Phase 9** | **Covariant analysis** (capability #4) — deeper insight in the accounts section; needs a defined "success" measure | **PLANNED** |
+| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — record observations after the ride; the first **write** path; closes the OPEN→CLOSE loop | **PLANNED** |
 
 > ✅ **MVP FEATURE-COMPLETE (Phases 1–6).** The morning coaching brief now runs end to end:
 > **synthetic data → RBAC/PRP data-access layer → deterministic ranking → the five brief
 > sections → the orchestrated, narrated, validated brief → the read-only API → the read-only
-> web UI.** `pytest` → **125 passed**. The remaining OPEN items (§5) are **enhancements / next
-> capabilities, not gaps in the MVP**.
+> web UI.** `pytest` → **129 passed**. **Phases 7–10 (capabilities #6/#5/#4/#2) are PLANNED**,
+> with **Phase 7 (theme aggregation) the immediate next action**; the OPEN items (§5) are
+> enhancements / next capabilities, **not gaps in the MVP**.
+
+### Diagrams
+
+Four diagrams live in [`docs/diagrams/`](diagrams/), referenced as **images** in `README.md`
+and `docs/technical-architecture.md` (GitHub renders an SVG referenced as an image file, not
+inline `<svg>` code):
+
+- **`architecture.svg`** — the **complete target architecture** (the whole system, every capability).
+- **`flow-detailed.svg`** — the detailed **OPEN→CLOSE flow**, with the two safety gates (rep-in-scope, and narrate-before-expose).
+- **`ranking-rollup.svg`** — how **rep ranking** rolls the per-(account, brand) signals up into one score per rep.
+- **`sequence.svg`** — a **swimlane** of who calls whom to build and close a brief (solid = request, dashed = response).
 
 ---
 
@@ -609,7 +625,7 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
    the **orchestrator + assembly** (`src/coach/orchestrator/`) + the **read-only API**
    (`src/coach/api/app.py`), **audit/logging** (`src/coach/observability/audit.py`), the
    **web UI** (`web/index.html`), and the **offline demo server** (`src/coach/api/demo.py`),
-   and run `uv run pytest -q` to confirm the suite is green (**125 passing**).
+   and run `uv run pytest -q` to confirm the suite is green (**129 passing**).
 
 **Run it locally:**
 - **Offline demo (no AWS, recommended for a walkthrough):** `uv run uvicorn coach.api.demo:app
@@ -621,13 +637,17 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   (`uv run python -m coach.synthetic.generate`).
 
 **Immediate next action (the MVP build is done):**
-1. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
+1. **Phase 7 — theme aggregation (capability #6)** is the next build: read *across* reps to
+   surface common coaching themes for a leadership view (a new read direction behind the same
+   data-access door). Phases 8–10 (Summit optimization, covariant analysis, verbal-feedback /
+   CLOSE) follow.
+2. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
    and the visible reasons, and use it to gather feedback (and to drive the workshop + the
    config tuning in §5).
-2. **Refresh the architecture / flow diagrams** — the README / `docs/technical-architecture.md`
-   diagrams still mark the **orchestrator, API, and UI as planned**; all three are now built
-   (the fixed LangGraph DAG, the read-only FastAPI surface, and the read-only web page), so the
-   diagrams should be updated to show them as implemented (doc-only).
+3. **Diagrams refreshed — DONE.** `README.md` and `docs/technical-architecture.md` now embed
+   the four diagrams in [`docs/diagrams/`](diagrams/) as images (architecture, flow-detailed,
+   ranking-rollup, sequence); the old "orchestrator / API / UI planned" diagram captions are
+   gone. See the **Diagrams** subsection in §6.
 
 **Reminders to carry forward:**
 - **Narrate before expose — done and enforced.** `assert_narrated` raises on any surviving

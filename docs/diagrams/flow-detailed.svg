@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 930" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Detailed step-by-step flow with sub-steps and two clearly explained decision gates">
+  <style>
+    .bg{fill:#FAF8F3}
+    .title{fill:#2A2622;font-size:18px;font-weight:700}
+    .subtitle{fill:#6B655C;font-size:11px}
+    .section{fill:#8A8378;font-size:12px;font-weight:700;letter-spacing:0.5px}
+    .sh{fill:#2A2622;font-size:12.5px;font-weight:600}
+    .dh{fill:#1F4D43;font-size:12.5px;font-weight:600}
+    .li{fill:#5C564D;font-size:9.5px}
+    .card{fill:#EDEFEE;stroke:#707A76;stroke-width:1}
+    .door{fill:#D7E9E1;stroke:#2E7D6B;stroke-width:2}
+    .exp{fill:#E6EEF3;stroke:#5A7689;stroke-width:1}
+    .dia{fill:#F3ECE2;stroke:#A98C66;stroke-width:1.4}
+    .out{fill:#F0E3E0;stroke:#B07A6E;stroke-width:1}
+    .diatxt{fill:#5C4636;font-size:8.5px;font-weight:600}
+    .outtxt{fill:#7A3F33;font-size:8.5px}
+    .yes{fill:#2E7D6B;font-size:9px;font-weight:600}
+    .no{fill:#B07A6E;font-size:9px;font-weight:600}
+    .br{fill:#23404F;font-size:10.5px;font-weight:600}
+    .brs{fill:#4C5E69;font-size:9px}
+    .panel{fill:#FBF6EE;stroke:#C7B79A;stroke-width:1}
+    .ph{fill:#5C4636;font-size:10.5px;font-weight:700}
+    .pg{fill:#5C4636;font-size:9px;font-weight:700}
+    .pl{fill:#6B5E4C;font-size:8.5px}
+    .arrow{stroke:#8A8378;stroke-width:1.6;fill:none}
+    .loop{stroke:#B79A6B;stroke-width:1.6;fill:none;stroke-dasharray:5 4}
+    .looptxt{fill:#8A7340;font-size:10.5px;font-style:italic}
+  </style>
+  <rect class="bg" x="0" y="0" width="1000" height="930"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 2 L8 5 L2 8" fill="none" stroke="#8A8378" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="l" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 2 L8 5 L2 8" fill="none" stroke="#B79A6B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+
+  <text class="title" x="460" y="30" text-anchor="middle">Detailed flow — producing and closing a coaching brief</text>
+  <text class="subtitle" x="460" y="48" text-anchor="middle">each stage opened into its sub-steps, with the two safety gates explained on the right</text>
+
+  <text class="section" x="60" y="74" text-anchor="start">OPEN — the morning brief</text>
+
+  <!-- S1 -->
+  <rect class="card" x="180" y="84" width="520" height="64" rx="7"/>
+  <text class="sh" x="198" y="106">1 · Request + identity</text>
+  <text class="li" x="198" y="124">· DM opens the workspace and requests the brief</text>
+  <text class="li" x="198" y="139">· API resolves identity into role → scope level (AccessContext)</text>
+  <line class="arrow" x1="440" y1="148" x2="440" y2="164" marker-end="url(#a)"/>
+
+  <!-- S2 door read -->
+  <rect class="door" x="180" y="164" width="520" height="80" rx="7"/>
+  <text class="dh" x="198" y="186">2 · Data-access READ — scope + PRP</text>
+  <text class="li" x="198" y="204">· apply scope filter: own district / region / all</text>
+  <text class="li" x="198" y="219">· scrub PRP HCPs and their metrics</text>
+  <text class="li" x="198" y="234">· return reps · per-brand metrics · calls · sessions</text>
+  <!-- gate D1 -->
+  <line class="arrow" x1="700" y1="204" x2="763" y2="204" marker-end="url(#a)"/>
+  <polygon class="dia" points="765,204 810,172 855,204 810,236"/>
+  <text class="diatxt" x="810" y="201" text-anchor="middle">rep in</text>
+  <text class="diatxt" x="810" y="212" text-anchor="middle">your area?</text>
+  <line class="arrow" x1="810" y1="236" x2="810" y2="252" marker-end="url(#a)"/>
+  <text class="no" x="820" y="248">no</text>
+  <rect class="out" x="735" y="253" width="150" height="32" rx="5"/>
+  <text class="outtxt" x="810" y="267" text-anchor="middle">403 — kept hidden</text>
+  <text class="outtxt" x="810" y="279" text-anchor="middle">(same as "not found")</text>
+  <text class="yes" x="452" y="258">yes ↓</text>
+  <line class="arrow" x1="440" y1="244" x2="440" y2="260" marker-end="url(#a)"/>
+
+  <!-- S3 ranking -->
+  <rect class="card" x="180" y="260" width="520" height="80" rx="7"/>
+  <text class="sh" x="198" y="282">3 · Ranking engine</text>
+  <text class="li" x="198" y="300">· roll up 4 signals across (account, brand) rows  (+ Summit lift)</text>
+  <text class="li" x="198" y="315">· normalize each to 0..1 → apply weights → score</text>
+  <text class="li" x="198" y="330">· rank reps · build the reason (drivers + top contributors)</text>
+  <line class="arrow" x1="440" y1="340" x2="440" y2="356" marker-end="url(#a)"/>
+
+  <!-- S4 sections -->
+  <rect class="card" x="180" y="356" width="520" height="96" rx="7"/>
+  <text class="sh" x="198" y="378">4 · Build the five sections (in parallel)</text>
+  <text class="li" x="198" y="396">· Coaching focus — signals → focus catalog (config), top 1-3</text>
+  <text class="li" x="198" y="411">· Ride-along prep — prior notes (scoped + PRP) + agreed actions / next</text>
+  <text class="li" x="198" y="426">· Accounts + context — key (account, brand) rows, mismatch flag (+ covariant)</text>
+  <text class="li" x="198" y="441">· Opener — from focus + accounts + priority → talking points</text>
+  <line class="arrow" x1="440" y1="452" x2="440" y2="468" marker-end="url(#a)"/>
+
+  <!-- S5 narrate -->
+  <rect class="card" x="180" y="468" width="520" height="64" rx="7"/>
+  <text class="sh" x="198" y="490">5 · Narrate with Claude (wording only)</text>
+  <text class="li" x="198" y="508">· per section: write the reason summary / phrasing</text>
+  <text class="li" x="198" y="523">· facts preserved (model_copy) — the LLM never changes ranks or facts</text>
+  <line class="arrow" x1="440" y1="532" x2="440" y2="548" marker-end="url(#a)"/>
+
+  <!-- S6 assemble + gate -->
+  <rect class="card" x="180" y="548" width="520" height="70" rx="7"/>
+  <text class="sh" x="198" y="570">6 · Assemble + guard</text>
+  <text class="li" x="198" y="588">· combine the five sections into one CoachingBrief</text>
+  <text class="li" x="198" y="603">· check the wording is complete  →</text>
+  <!-- gate D2 -->
+  <line class="arrow" x1="700" y1="583" x2="763" y2="583" marker-end="url(#a)"/>
+  <polygon class="dia" points="765,583 810,551 855,583 810,615"/>
+  <text class="diatxt" x="810" y="580" text-anchor="middle">all wording</text>
+  <text class="diatxt" x="810" y="591" text-anchor="middle">written?</text>
+  <line class="arrow" x1="810" y1="615" x2="810" y2="631" marker-end="url(#a)"/>
+  <text class="no" x="820" y="627">no</text>
+  <rect class="out" x="738" y="632" width="144" height="32" rx="5"/>
+  <text class="outtxt" x="810" y="646" text-anchor="middle">blocked —</text>
+  <text class="outtxt" x="810" y="658" text-anchor="middle">brief is never shown</text>
+  <text class="yes" x="452" y="632">yes ↓</text>
+  <line class="arrow" x1="440" y1="618" x2="440" y2="634" marker-end="url(#a)"/>
+
+  <!-- S7 render -->
+  <rect class="exp" x="180" y="634" width="520" height="50" rx="7"/>
+  <text class="sh" x="198" y="656">7 · Render to the DM</text>
+  <text class="li" x="198" y="674">· API returns; the UI shows the brief; every item shows its reason</text>
+
+  <text class="section" x="60" y="712" text-anchor="start">CLOSE — after the ride</text>
+  <line class="arrow" x1="440" y1="684" x2="440" y2="722" marker-end="url(#a)"/>
+
+  <!-- S8 ride -->
+  <rect class="exp" x="180" y="722" width="520" height="40" rx="7"/>
+  <text class="sh" x="198" y="746">8 · DM rides and coaches (in the field)</text>
+  <line class="arrow" x1="440" y1="762" x2="440" y2="778" marker-end="url(#a)"/>
+
+  <!-- S9 capture -->
+  <rect class="exp" x="180" y="778" width="520" height="64" rx="7"/>
+  <text class="sh" x="198" y="800">9 · Capture observations (voice)</text>
+  <text class="li" x="198" y="818">· Amazon Transcribe: voice → text</text>
+  <text class="li" x="198" y="833">· Claude: structure → observations · agreed actions · observe-next</text>
+  <line class="arrow" x1="440" y1="842" x2="440" y2="858" marker-end="url(#a)"/>
+
+  <!-- S10 door write -->
+  <rect class="door" x="180" y="858" width="520" height="50" rx="7"/>
+  <text class="dh" x="198" y="880">10 · Data-access WRITE — scope + PRP</text>
+  <text class="li" x="198" y="898">· save the close record linked to the rep / session</text>
+
+  <!-- branch to leadership -->
+  <line class="arrow" x1="700" y1="883" x2="730" y2="883" marker-end="url(#a)"/>
+  <rect class="exp" x="732" y="860" width="250" height="46" rx="7"/>
+  <text class="br" x="857" y="880" text-anchor="middle">Theme aggregation →</text>
+  <text class="brs" x="857" y="895" text-anchor="middle">Leadership dashboard (saved data)</text>
+
+  <!-- loop -->
+  <path class="loop" d="M180 883 H58 V200 H178" marker-end="url(#l)"/>
+  <text class="looptxt" x="46" y="540" text-anchor="middle" transform="rotate(-90 46 540)">feeds tomorrow's brief</text>
+
+  <!-- explanation panel -->
+  <rect class="panel" x="735" y="300" width="247" height="232" rx="8"/>
+  <text class="ph" x="751" y="322">How the two gates work</text>
+  <text class="pg" x="751" y="344">GATE 1 · rep in your area?</text>
+  <text class="pl" x="751" y="360">You only see reps in your own</text>
+  <text class="pl" x="751" y="373">district / region. A rep outside it</text>
+  <text class="pl" x="751" y="386">returns 403 — the very same</text>
+  <text class="pl" x="751" y="399">answer as "not found", so you</text>
+  <text class="pl" x="751" y="412">cannot tell hidden reps exist.</text>
+  <text class="pg" x="751" y="440">GATE 2 · all wording written?</text>
+  <text class="pl" x="751" y="456">A "placeholder" is wording Claude</text>
+  <text class="pl" x="751" y="469">has not written yet. The brief is</text>
+  <text class="pl" x="751" y="482">shown only when every reason is</text>
+  <text class="pl" x="751" y="495">written. If any slot is still a</text>
+  <text class="pl" x="751" y="508">placeholder, the brief is blocked</text>
+  <text class="pl" x="751" y="521">so a half-empty brief never shows.</text>
+</svg>

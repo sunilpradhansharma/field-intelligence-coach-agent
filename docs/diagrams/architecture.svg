@@ -1,53 +1,168 @@
-<svg width="100%" viewBox="0 0 680 540" role="img" style="" xmlns="http://www.w3.org/2000/svg"><title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Field intelligence coach agent — architecture with build status</title><desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Layered architecture from users down through the app, orchestrator, deterministic ranking and Claude, to the data-access layer (built, enforcing RBAC and PRP) and the data stores. Teal nodes are built; gray nodes are planned.</desc>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 900" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Complete target architecture of the Field Intelligence Coach Agent with all capabilities">
+  <style>
+    .bg{fill:#FAF8F3}
+    .title{fill:#2A2622;font-size:19px;font-weight:700}
+    .subtitle{fill:#6B655C;font-size:11px}
+    .band{fill:#8A8378;font-size:10.5px;font-weight:700;letter-spacing:0.5px}
+    .ct{fill:#2A2622;font-size:13px;font-weight:600}
+    .cs{fill:#5C564D;font-size:9.5px}
+    .et{fill:#23404F;font-size:11.5px;font-weight:600}
+    .es{fill:#4C5E69;font-size:9px}
+    .note{fill:#6B655C;font-size:9.5px;font-style:italic}
+    .card{fill:#EDEFEE;stroke:#707A76;stroke-width:1}
+    .exp{fill:#E6EEF3;stroke:#5A7689;stroke-width:1}
+    .intel{fill:#ECE7F1;stroke:#7E6E94;stroke-width:1}
+    .ai{fill:#F3ECE2;stroke:#A98C66;stroke-width:1}
+    .door{fill:#D7E9E1;stroke:#2E7D6B;stroke-width:2}
+    .src{fill:#F0E9DF;stroke:#9A8B73;stroke-width:1}
+    .arrow{stroke:#8A8378;stroke-width:1.6;fill:none}
+    .div{stroke:#C7C1B6;stroke-width:1;stroke-dasharray:4 4}
+  </style>
+  <rect class="bg" x="0" y="0" width="1120" height="900"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 2 L8 5 L2 8" fill="none" stroke="#8A8378" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="a2" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M8 2 L2 5 L8 8" fill="none" stroke="#8A8378" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="180" y="40" width="320" height="56" rx="8" stroke-width="0.5" style="fill:rgb(241, 239, 232);stroke:rgb(95, 94, 90);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="340" y="62" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68, 68, 65);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">DM · RD · RBE · Head of Sales</text>
-<text x="340" y="80" text-anchor="middle" dominant-baseline="central" style="fill:rgb(95, 94, 90);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">the people who use it</text>
-</g>
-<line x1="340" y1="96" x2="340" y2="128" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115, 114, 108);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text class="title" x="560" y="32" text-anchor="middle">Field Intelligence Coach Agent — complete architecture</text>
+  <text class="subtitle" x="560" y="50" text-anchor="middle">the full system with every capability</text>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"><rect x="220" y="130" width="240" height="44" rx="8" stroke-width="0.5" style="fill:rgb(241, 239, 232);stroke:rgb(95, 94, 90);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/><text x="340" y="152" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68, 68, 65);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Web app + API (FastAPI)</text></g>
-<line x1="340" y1="174" x2="340" y2="206" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115, 114, 108);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- ROLES -->
+  <text class="band" x="165" y="93" text-anchor="end">ROLES</text>
+  <rect class="card" x="180" y="70" width="910" height="44" rx="7"/>
+  <text class="ct" x="635" y="89" text-anchor="middle">District manager · RD · RBE · Head of Sales</text>
+  <text class="cs" x="635" y="104" text-anchor="middle">scope: self · district · region · all</text>
+  <line class="arrow" x1="635" y1="114" x2="635" y2="130" marker-end="url(#a)"/>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"><rect x="220" y="208" width="240" height="44" rx="8" stroke-width="0.5" style="fill:rgb(241, 239, 232);stroke:rgb(95, 94, 90);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/><text x="340" y="230" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68, 68, 65);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Orchestrator (LangGraph)</text></g>
-<line x1="340" y1="252" x2="190" y2="284" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115, 114, 108);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<line x1="340" y1="252" x2="500" y2="284" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115, 114, 108);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- EXPERIENCE -->
+  <text class="band" x="165" y="161" text-anchor="end">EXPERIENCE</text>
+  <rect class="exp" x="180" y="132" width="445" height="50" rx="7"/>
+  <text class="et" x="402" y="152" text-anchor="middle">DM workspace</text>
+  <text class="es" x="402" y="167" text-anchor="middle">morning brief + CLOSE capture</text>
+  <rect class="exp" x="645" y="132" width="445" height="50" rx="7"/>
+  <text class="et" x="867" y="152" text-anchor="middle">Leadership dashboard</text>
+  <text class="es" x="867" y="167" text-anchor="middle">aggregated coaching themes</text>
+  <line class="arrow" x1="635" y1="182" x2="635" y2="198" marker-end="url(#a)"/>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="50" y="286" width="280" height="56" rx="8" stroke-width="0.5" style="fill:rgb(241, 239, 232);stroke:rgb(95, 94, 90);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="190" y="308" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68, 68, 65);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Ranking engine</text>
-<text x="190" y="326" text-anchor="middle" dominant-baseline="central" style="fill:rgb(95, 94, 90);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">deterministic — no LLM</text>
-</g>
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="370" y="286" width="260" height="56" rx="8" stroke-width="0.5" style="fill:rgb(241, 239, 232);stroke:rgb(95, 94, 90);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="500" y="308" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68, 68, 65);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Claude on Bedrock</text>
-<text x="500" y="326" text-anchor="middle" dominant-baseline="central" style="fill:rgb(95, 94, 90);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">writes reason text only</text>
-</g>
-<line x1="190" y1="342" x2="270" y2="368" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115, 114, 108);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- API -->
+  <text class="band" x="165" y="223" text-anchor="end">API</text>
+  <rect class="card" x="180" y="200" width="910" height="44" rx="7"/>
+  <text class="ct" x="635" y="219" text-anchor="middle">API — FastAPI</text>
+  <text class="cs" x="635" y="234" text-anchor="middle">read: briefs + themes · write: CLOSE notes · resolves identity into an AccessContext</text>
+  <line class="arrow" x1="635" y1="244" x2="635" y2="260" marker-end="url(#a)"/>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="160" y="370" width="360" height="56" rx="8" stroke-width="0.5" style="fill:rgb(225, 245, 238);stroke:rgb(15, 110, 86);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="340" y="392" text-anchor="middle" dominant-baseline="central" style="fill:rgb(8, 80, 65);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Data-access layer</text>
-<text x="340" y="410" text-anchor="middle" dominant-baseline="central" style="fill:rgb(15, 110, 86);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">RBAC + PRP scrub · the single door</text>
-</g>
-<line x1="340" y1="426" x2="190" y2="438" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115, 114, 108);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<line x1="340" y1="426" x2="500" y2="438" marker-end="url(#arrow)" style="fill:none;stroke:rgb(115, 114, 108);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- ORCHESTRATION -->
+  <text class="band" x="165" y="285" text-anchor="end">ORCHESTRATION</text>
+  <rect class="card" x="180" y="262" width="910" height="44" rx="7"/>
+  <text class="ct" x="635" y="281" text-anchor="middle">Orchestrator — LangGraph (fixed graph)</text>
+  <text class="cs" x="635" y="296" text-anchor="middle">narrate-before-expose · recommendations are suggestion-only, the human decides</text>
+  <line class="arrow" x1="635" y1="306" x2="635" y2="322" marker-end="url(#a)"/>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="50" y="440" width="280" height="56" rx="8" stroke-width="0.5" style="fill:rgb(225, 245, 238);stroke:rgb(15, 110, 86);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="190" y="462" text-anchor="middle" dominant-baseline="central" style="fill:rgb(8, 80, 65);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">SQLite store</text>
-<text x="190" y="480" text-anchor="middle" dominant-baseline="central" style="fill:rgb(15, 110, 86);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">reps, accounts, per-brand metrics</text>
-</g>
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="370" y="440" width="260" height="56" rx="8" stroke-width="0.5" style="fill:rgb(241, 239, 232);stroke:rgb(95, 94, 90);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="500" y="462" text-anchor="middle" dominant-baseline="central" style="fill:rgb(68, 68, 65);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:central">Chroma store</text>
-<text x="500" y="480" text-anchor="middle" dominant-baseline="central" style="fill:rgb(95, 94, 90);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:central">coaching notes (planned)</text>
-</g>
+  <!-- BRIEF BUILDERS -->
+  <text class="band" x="165" y="351" text-anchor="end">BRIEF BUILDERS</text>
+  <rect class="card" x="180" y="324" width="166" height="52" rx="7"/>
+  <text class="ct" x="263" y="346" text-anchor="middle" font-size="12">Ranking</text>
+  <text class="cs" x="263" y="361" text-anchor="middle">who &amp; why</text>
+  <rect class="card" x="366" y="324" width="166" height="52" rx="7"/>
+  <text class="ct" x="449" y="346" text-anchor="middle" font-size="12">Coaching focus</text>
+  <text class="cs" x="449" y="361" text-anchor="middle">what to coach</text>
+  <rect class="card" x="552" y="324" width="166" height="52" rx="7"/>
+  <text class="ct" x="635" y="346" text-anchor="middle" font-size="12">Ride-along prep</text>
+  <text class="cs" x="635" y="361" text-anchor="middle">what happened last</text>
+  <rect class="card" x="738" y="324" width="166" height="52" rx="7"/>
+  <text class="ct" x="821" y="346" text-anchor="middle" font-size="12">Accounts + context</text>
+  <text class="cs" x="821" y="361" text-anchor="middle">per-brand · mismatch</text>
+  <rect class="card" x="924" y="324" width="166" height="52" rx="7"/>
+  <text class="ct" x="1007" y="346" text-anchor="middle" font-size="12">Opener</text>
+  <text class="cs" x="1007" y="361" text-anchor="middle">how to open</text>
+  <line class="arrow" x1="635" y1="376" x2="635" y2="392" marker-end="url(#a)"/>
 
-<rect x="150" y="510" width="14" height="14" rx="3" stroke-width="0.5" style="fill:rgb(225, 245, 238);stroke:rgb(15, 110, 86);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="172" y="517" dominant-baseline="central" style="fill:rgb(61, 61, 58);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:start;dominant-baseline:central">Built (Phase 1-2)</text>
-<rect x="360" y="510" width="14" height="14" rx="3" stroke-width="0.5" style="fill:rgb(241, 239, 232);stroke:rgb(95, 94, 90);color:rgb(0, 0, 0);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="382" y="517" dominant-baseline="central" style="fill:rgb(61, 61, 58);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:start;dominant-baseline:central">Planned (Phase 3-6)</text>
+  <!-- INTELLIGENCE -->
+  <text class="band" x="165" y="421" text-anchor="end">INTELLIGENCE</text>
+  <rect class="intel" x="180" y="394" width="290" height="52" rx="7"/>
+  <text class="et" x="325" y="416" text-anchor="middle">Summit optimizer</text>
+  <text class="es" x="325" y="431" text-anchor="middle">biggest ranking lift  ·  feeds Ranking</text>
+  <rect class="intel" x="490" y="394" width="290" height="52" rx="7"/>
+  <text class="et" x="635" y="416" text-anchor="middle">Covariant analysis</text>
+  <text class="es" x="635" y="431" text-anchor="middle">winning blend of variables  ·  feeds Accounts</text>
+  <rect class="intel" x="800" y="394" width="290" height="52" rx="7"/>
+  <text class="et" x="945" y="416" text-anchor="middle">Theme aggregation</text>
+  <text class="es" x="945" y="431" text-anchor="middle">patterns across reps  ·  feeds Leadership</text>
+  <text class="note" x="180" y="462" text-anchor="start">All builders + intelligence share one signal rollup (signals.py) — consistent numbers, no drift.</text>
+  <line class="arrow" x1="635" y1="446" x2="635" y2="476" marker-end="url(#a)"/>
+
+  <!-- AI and capture -->
+  <text class="band" x="165" y="503" text-anchor="end">AI &amp; CAPTURE</text>
+  <rect class="ai" x="180" y="478" width="208" height="50" rx="7"/>
+  <text class="et" x="284" y="498" text-anchor="middle">Claude on Bedrock</text>
+  <text class="es" x="284" y="513" text-anchor="middle">narration + summaries</text>
+  <rect class="ai" x="414" y="478" width="208" height="50" rx="7"/>
+  <text class="et" x="518" y="498" text-anchor="middle">Titan embeddings</text>
+  <text class="es" x="518" y="513" text-anchor="middle">notes search</text>
+  <rect class="ai" x="648" y="478" width="208" height="50" rx="7"/>
+  <text class="et" x="752" y="498" text-anchor="middle">Amazon Transcribe</text>
+  <text class="es" x="752" y="513" text-anchor="middle">voice to text</text>
+  <rect class="ai" x="882" y="478" width="208" height="50" rx="7"/>
+  <text class="et" x="986" y="498" text-anchor="middle">CLOSE capture</text>
+  <text class="es" x="986" y="513" text-anchor="middle">voice notes to structured (write)</text>
+  <line class="arrow" x1="635" y1="528" x2="635" y2="546" marker-end="url(#a)"/>
+
+  <!-- DATA ACCESS (door) -->
+  <text class="band" x="165" y="577" text-anchor="end">DATA ACCESS</text>
+  <rect class="door" x="180" y="548" width="910" height="58" rx="7"/>
+  <text class="ct" x="635" y="568" text-anchor="middle">Data-access layer — THE SINGLE DOOR</text>
+  <text class="cs" x="635" y="584" text-anchor="middle">RBAC scope (self/district/region/all) + PRP scrubbing · read + write · AccessContext / ScopeError</text>
+  <text class="cs" x="635" y="597" text-anchor="middle">notes retriever enforces the same RBAC + PRP at query time</text>
+  <line class="arrow" x1="635" y1="606" x2="635" y2="624" marker-end="url(#a)"/>
+
+  <!-- STORES -->
+  <text class="band" x="165" y="649" text-anchor="end">STORES</text>
+  <rect class="card" x="180" y="626" width="290" height="48" rx="7"/>
+  <text class="ct" x="325" y="646" text-anchor="middle">Structured store</text>
+  <text class="cs" x="325" y="661" text-anchor="middle">reps · accounts · per-brand metrics</text>
+  <rect class="card" x="490" y="626" width="290" height="48" rx="7"/>
+  <text class="ct" x="635" y="646" text-anchor="middle">Vector store</text>
+  <text class="cs" x="635" y="661" text-anchor="middle">coaching notes</text>
+  <rect class="card" x="800" y="626" width="290" height="48" rx="7"/>
+  <text class="ct" x="945" y="646" text-anchor="middle">Coaching-close records</text>
+  <text class="cs" x="945" y="661" text-anchor="middle">written back after rides (the loop)</text>
+  <line class="arrow" x1="635" y1="700" x2="635" y2="676" marker-end="url(#a)"/>
+  <text class="note" x="660" y="692" text-anchor="start">ingest + PRP scrub</text>
+
+  <!-- DATA SOURCES -->
+  <text class="band" x="165" y="727" text-anchor="end">DATA SOURCES</text>
+  <rect class="src" x="180" y="702" width="166" height="50" rx="7"/>
+  <text class="ct" x="263" y="722" text-anchor="middle" font-size="12">Veeva</text>
+  <text class="cs" x="263" y="737" text-anchor="middle">CRM · notes</text>
+  <rect class="src" x="366" y="702" width="166" height="50" rx="7"/>
+  <text class="ct" x="449" y="722" text-anchor="middle" font-size="12">IQVIA</text>
+  <text class="cs" x="449" y="737" text-anchor="middle">scripts</text>
+  <rect class="src" x="552" y="702" width="166" height="50" rx="7"/>
+  <text class="ct" x="635" y="722" text-anchor="middle" font-size="12">AEBAT</text>
+  <text class="cs" x="635" y="737" text-anchor="middle">spend</text>
+  <rect class="src" x="738" y="702" width="166" height="50" rx="7"/>
+  <text class="ct" x="821" y="722" text-anchor="middle" font-size="12">Dashboards</text>
+  <text class="cs" x="821" y="737" text-anchor="middle">share · volume</text>
+  <rect class="src" x="924" y="702" width="166" height="50" rx="7"/>
+  <text class="ct" x="1007" y="722" text-anchor="middle" font-size="12">Summit files</text>
+  <text class="cs" x="1007" y="737" text-anchor="middle">calc logic</text>
+
+  <line class="div" x1="60" y1="770" x2="1060" y2="770"/>
+
+  <!-- CROSS-CUTTING -->
+  <text class="band" x="165" y="800" text-anchor="end">CROSS-CUTTING</text>
+  <rect class="card" x="180" y="782" width="208" height="48" rx="7"/>
+  <text class="ct" x="284" y="802" text-anchor="middle" font-size="12">Config</text>
+  <text class="cs" x="284" y="817" text-anchor="middle">weights · caps · catalogs · role map</text>
+  <rect class="card" x="414" y="782" width="208" height="48" rx="7"/>
+  <text class="ct" x="518" y="802" text-anchor="middle" font-size="12">Principles</text>
+  <text class="cs" x="518" y="817" text-anchor="middle">a reason on everything · human decides</text>
+  <rect class="card" x="648" y="782" width="208" height="48" rx="7"/>
+  <text class="ct" x="752" y="802" text-anchor="middle" font-size="12">Security</text>
+  <text class="cs" x="752" y="817" text-anchor="middle">Cognito · Bedrock Guardrails</text>
+  <rect class="card" x="882" y="782" width="208" height="48" rx="7"/>
+  <text class="ct" x="986" y="802" text-anchor="middle" font-size="12">Observability</text>
+  <text class="cs" x="986" y="817" text-anchor="middle">privacy-safe logs · audit</text>
+
+  <text class="note" x="560" y="858" text-anchor="middle">Production data platform: Aurora / Athena (structured) · Bedrock Knowledge Bases / OpenSearch (vector)</text>
 </svg>

@@ -1,136 +1,108 @@
-# Technical architecture (MVP)
+# Technical architecture
 
-> **Audience:** engineers. **Scope:** the morning coaching brief MVP.
-> Every part below is marked **BUILT NOW (Phase 1)** or **PLANNED (later phase)**.
-> Source of truth: `specs/001-morning-coaching-brief/plan.md`,
-> `specs/001-morning-coaching-brief/tasks.md`, `CLAUDE.md`, and the code under
-> `src/coach/`.
+> **Audience:** engineers. **Scope:** the **complete target architecture** of the field
+> intelligence coach — the whole system, every capability — described layer by layer to match
+> the architecture diagram. The morning coaching brief (Phases 1–6) is built and tested; the
+> later capabilities (Phases 7–10) are planned.
+> **For what is built today versus planned next, [`docs/project-status.md`](project-status.md)
+> is the single source of truth** (this doc does not repeat per-component build status).
+> Design source: `specs/001-morning-coaching-brief/plan.md`, `tasks.md`, `CLAUDE.md`, and the
+> code under `src/coach/`.
 
 ---
 
 ## 1. Overview
 
-### High-level technical architecture
+### Diagrams
 
-```mermaid
-flowchart TD
-    subgraph USER["User"]
-        DM["District Manager / RBD<br/>(PLANNED)"]
-    end
+The **complete target architecture** — the full system with every capability:
 
-    subgraph WEB["Web app (UI)"]
-        UI["Web page renders brief + reasons<br/>(PLANNED)"]
-    end
+![Complete target architecture for the field intelligence coach](diagrams/architecture.svg)
 
-    subgraph APILYR["API — FastAPI (coach.api.app)"]
-        API["FastAPI app<br/>identity → AccessContext<br/>(PLANNED)"]
-    end
+Companion diagrams (referenced in the relevant sections below):
 
-    subgraph ORCH["Orchestration — LangGraph orchestrator (PLANNED)"]
-        RANK["Ranking engine<br/>deterministic · pure code · no LLM<br/>(PLANNED)"]
-        B1["prioritize builder<br/>(PLANNED)"]
-        B2["coaching focus builder<br/>(PLANNED)"]
-        B3["ride-along prep builder<br/>(PLANNED)"]
-        B4["accounts / context builder<br/>(PLANNED)"]
-        B5["opener builder<br/>(PLANNED)"]
-    end
+- **[`diagrams/flow-detailed.svg`](diagrams/flow-detailed.svg)** — the detailed OPEN→CLOSE
+  flow, with the two safety gates (rep-in-scope, and narrate-before-expose).
+- **[`diagrams/ranking-rollup.svg`](diagrams/ranking-rollup.svg)** — how rep ranking rolls
+  the per-(account, brand) signals up into one score per rep (Section 6).
+- **[`diagrams/sequence.svg`](diagrams/sequence.svg)** — a swimlane of who calls whom to
+  build and close a brief (solid = request, dashed = response).
 
-    subgraph AI["AI — Amazon Bedrock"]
-        CLAUDE["Claude<br/>text for reasons / focus / opener<br/>(PLANNED)"]
-        TITAN["Titan Embeddings<br/>for coaching notes<br/>(PLANNED)"]
-    end
+### The architecture, layer by layer
 
-    subgraph DAL["Data-access layer (RBAC enforced)"]
-        SEAM["DataAccess + Retriever<br/>single shared seam<br/>(BUILT: interface + SQLite store)"]
-    end
+Top to bottom, matching the diagram. The unbreakable rule: **every layer reaches data only
+through the single data-access door**, which enforces RBAC scope and PRP scrubbing on every
+read (and, for the write path, every write).
 
-    subgraph STORES["Data stores"]
-        SQL["SQLite / DuckDB<br/>reps, accounts, activity, share, volume, spend<br/>(BUILT: store + synthetic generator/schema)"]
-        VEC["ChromaDB / FAISS<br/>coaching-notes vectors<br/>(PLANNED)"]
-    end
+1. **Roles** — the people the system serves: the **district manager** (own district) and
+   **leadership / region-level roles** (their whole region, or all regions). Scope is a
+   property of the role, resolved server-side (never chosen by the caller).
+2. **Experience** — the **DM workspace** (the read-only morning-brief web page) and a
+   **leadership dashboard** (the aggregated, cross-rep view — Phase 7).
+3. **API** — a FastAPI service. It resolves the caller's identity into an `AccessContext`
+   (role → scope, from config) and exposes read endpoints for the brief; the CLOSE write
+   endpoint is the Phase 10 addition.
+4. **Orchestration** — a fixed, in-code **LangGraph DAG** (no autonomous loops) that runs the
+   builders in a deterministic order and assembles the brief (Section 5).
+5. **The five brief builders** — one per section: **prioritize** (deterministic ranking),
+   **coaching focus**, **ride-along prep**, **accounts / business context** (per brand), and
+   **opener**. Each returns a recommendation carrying a structured `Reason`.
+6. **Intelligence** — the analytics that feed the builders: **Summit / IC-plan** scoring
+   (Phase 8), **covariant analysis** of what moves with results (Phase 9), and **theme
+   aggregation** across reps for leadership (Phase 7).
+7. **AI & capture** — **Claude on Amazon Bedrock** (wording only — narrates reasons, drafts
+   focus/opener text; never decides ranks/scores), **Titan embeddings** for the notes RAG,
+   **Amazon Transcribe** for verbal feedback, and **CLOSE capture** of post-ride observations
+   (Phase 10).
+8. **Data-access door** — the single `DataAccess` / `Retriever` seam. **RBAC and PRP scrubbing
+   are enforced here on every read** (and every write), so no component can widen scope or see
+   a PRP HCP. This is the only layer that talks to the stores.
+9. **Stores** — a structured store (SQLite/DuckDB → Aurora/Athena) and a coaching-notes vector
+   store (in-memory/FAISS/Chroma → Bedrock Knowledge Bases / OpenSearch).
+10. **Data sources** — where real data would originate (Veeva, IQVIA, Summit, etc.); the MVP
+    uses a seeded **synthetic** generator only, behind the same interface.
+11. **Cross-cutting** — **config** (model id, weights, thresholds — never hard-coded), the
+    **constitution principles**, **security/privacy** (HR-sensitive rep data, private HCP
+    data, PRP), and **observability** (privacy-safe audit logging).
 
-    DM -->|opens app| UI
-    UI -->|request brief| API
-    API -->|build brief| ORCH
+The data-access layer is the **single seam** every component reads through, so swapping
+synthetic data for real connectors later is a source change, not a rewrite. Orchestration
+lives in **code**; the **rep ranking is a deterministic scoring function**, and the LLM only
+turns the structured reason into clear language — it **never decides or reorders the ranking**.
 
-    B1 --> RANK
-    RANK -->|"ranks + scores (deterministic)"| B1
-    ORCH -->|"narrate reason / focus / opener text only"| CLAUDE
+### Planned next capabilities (Phases 7–10)
 
-    B3 -->|embed query| TITAN
-    TITAN -->|vector| VEC
-    VEC -->|similar notes| B3
+Built on the same architecture above; numbered by capability. Current build status lives in
+[`docs/project-status.md`](project-status.md).
 
-    ORCH -->|all reads via seam| SEAM
-    B1 --> SEAM
-    B2 --> SEAM
-    B3 --> SEAM
-    B4 --> SEAM
-    B5 --> SEAM
-
-    SEAM -->|structured reads| SQL
-    SEAM -->|scoped note retrieval| VEC
-
-    classDef built fill:#d7ebd2,stroke:#2e7d32,color:#1b3d1a;
-    classDef planned fill:#f3f1e7,stroke:#9e9e9e,color:#444,stroke-dasharray:4 3;
-
-    class SEAM,SQL built;
-    class DM,UI,API,RANK,B1,B2,B3,B4,B5,CLAUDE,TITAN,VEC planned;
-```
-
-**Legend:** solid green = **BUILT NOW (Phase 1)**; dashed grey = **PLANNED (later phase)**.
-Only the data-access layer talks to the stores — the builders never touch a store directly.
-
-**Data and call flow**
-
-1. The District Manager opens the web app and asks for today's coaching brief *(PLANNED UI/API)*.
-2. FastAPI turns the signed-in identity into an `AccessContext` and calls the LangGraph orchestrator *(PLANNED)*.
-3. The orchestrator reads the DM's team data **only through the data-access layer**, which enforces RBAC, **scrubs any PRP-flagged HCPs**, and returns in-scope data *(seam BUILT; RBAC enforcement PLANNED, T008; PRP scrubbing PLANNED, T008A)*.
-4. The ranking engine scores reps in pure code from fixed, visible weights — **no LLM** — producing ranked reps, each with a structured `Reason` *(PLANNED)*.
-5. For the chosen rep, the five builders gather coaching focus, ride-along prep, accounts/context, and an opener — every item reading through the same seam *(PLANNED)*.
-6. The ride-along prep builder embeds its query with Titan and runs a similarity search in ChromaDB/FAISS, then gets the matching notes back *(PLANNED)*.
-7. Claude on Bedrock narrates each `Reason` and drafts focus/opener **text only** — it never changes ranks or scores *(PLANNED)*.
-8. The orchestrator assembles the one-page brief (every section carries a visible reason) and the web app shows it to the DM, who decides *(PLANNED)*.
-
----
-
-The system is a layered Python service. Components are organized top-down: people → web
-UI → an in-code orchestrator → five brief builders → a **data-access layer** → local
-stores. The data-access layer is the **single seam** every component reads through — no
-component touches a store directly, so swapping synthetic data for real connectors later
-is a source change, not a rewrite. Orchestration lives in **code** (a LangGraph DAG, no
-autonomous loops). The **rep ranking is a deterministic scoring function**; the LLM
-(Claude on Amazon Bedrock) only turns the structured reason into clear language and drafts
-free text — it **never decides or reorders the ranking**. Today only the foundation
-(schemas, the data-access interface, the SQLite store, and the synthetic generator) is
-built and tested; the orchestrator, the builders, the LLM/RAG layers, the API, and the UI
-are planned.
+- **Capability #6 — theme aggregation (Phase 7):** read *across* reps to surface common
+  coaching themes; powers the leadership dashboard. A new read direction behind the same door.
+- **Capability #5 — Summit optimization (Phase 8):** add Summit / IC-plan logic as a new
+  ranking signal, configurable per team (each team's plan differs).
+- **Capability #4 — covariant analysis (Phase 9):** deeper insight in the accounts section —
+  which factors move together with results; needs a defined "success" measure first.
+- **Capability #2 — verbal feedback / CLOSE (Phase 10):** capture post-ride observations
+  (Transcribe + CLOSE) — the **first write path** — closing the OPEN→CLOSE loop.
 
 ---
 
 ## 2. Module / package map
 
-All packages live under `src/coach/`. "Placeholder" = the directory and `__init__.py`
-exist but no implementation code yet.
+All packages live under `src/coach/`. (For which pieces are built today versus planned, see
+[`docs/project-status.md`](project-status.md) — this map does not repeat build status.)
 
-| Package | Responsibility | Key files | Status |
-|---|---|---|---|
-| `config` | Resolve settings from env: Bedrock model id, region, DB path, seed, fixed ranking weights (model id never hard-coded) | `config/settings.py` | **BUILT** |
-| `schemas` | Pydantic entities, the `Reason` object, recommendation objects, the synthetic `Dataset`; **+ T007A: `Brand` enum, `Account.prp`, `AccountBrandMetrics`, `CallActivity.brand`** | `schemas.py` | **BUILT** (incl. T007A amendment) |
-| `data_access` | The single read-seam: `DataAccess` + `Retriever` Protocols, `AccessContext`, `ScopeError`; SQLite store impl; **+ T007A: `prp` + brand columns + `account_brand_metrics` table** | `data_access/interface.py`, `data_access/sqlite_store.py` | **BUILT** (interface + store, incl. T007A) |
-| `data_access` (RBAC) | Territory scoping + out-of-scope denial enforced in the data layer | `data_access/rbac.py` *(planned)* | **PLANNED** (T008) |
-| `data_access` (PRP scrub) | Drop HCPs flagged `prp = true` (and their brand-metric / call-activity rows) before any result reaches a field user (FR-020) | (in the data layer, alongside RBAC) *(planned)* | **PLANNED** (T008A) |
-| `data_access` (RAG) | FAISS/Chroma retriever for coaching notes | `data_access/faiss_retriever.py` *(planned)* | **PLANNED** (T011) |
-| `synthetic` | Seeded synthetic data generator + CLI (`python -m coach.synthetic.generate`); **+ T009 amendment: flags ~5–10% of HCPs as PRP (≥1 guaranteed), per-(account, brand) metrics + call activity across the five brands** | `synthetic/generate.py` | **BUILT** (incl. T009 amendment) |
-| `llm` | Bedrock Claude wrapper (narration, opener) + Titan embeddings; model id from config | `llm/client.py`, `llm/embeddings.py` *(planned)* | **PLANNED** (T012, T010) |
-| `guardrails` | PII guardrail seam (pass-through in MVP → Bedrock Guardrails) | `guardrails/pii.py` *(planned)* | **PLANNED** (T013) |
-| `components` | The 5 brief builders + the separate LLM narration step | `components/prioritization.py`, `narrate.py`, `coaching_focus.py`, `ride_along_prep.py`, `accounts_context.py`, `opener.py` *(planned)* | **PLANNED** (T023–T037) |
-| `orchestrator` | LangGraph DAG + brief assembly (rejects any recommendation lacking a reason) | `orchestrator/graph.py`, `orchestrator/brief.py` *(planned)* | **PLANNED** (T015) |
-| `observability` | Per-brief / per-LLM audit records; field-level data classification; no out-of-scope data or raw PII in logs | `observability/audit.py` *(planned)* | **PLANNED** (T014) |
-| `api` | FastAPI app; simulated identity → `AccessContext`; read-only brief endpoints in the MVP (write/action paths for the full-access region role are a later concern — see the F6/F8 reconsideration in `docs/project-status.md`) | `api/app.py` *(planned)* | **PLANNED** (T016, T025, T037) |
-
-Placeholder packages today (only `__init__.py`): `llm`, `guardrails`, `components`,
-`orchestrator`, `observability`, `api`.
+| Package | Responsibility | Key files |
+|---|---|---|
+| `config` | Resolve settings from env: Bedrock model id, region, DB path, seed, ranking weights + normalization caps + narration thresholds (model id never hard-coded) | `config/settings.py` |
+| `schemas` | Pydantic entities, the `Reason` object, recommendation objects + `CoachingBrief`, the synthetic `Dataset`; the `Brand` enum, `Account.prp`, `AccountBrandMetrics`, `CallActivity.brand` | `schemas.py` |
+| `data_access` | The single read/write seam: `DataAccess` + `Retriever` Protocols, `AccessContext`, `ScopeError`; the SQLite store; RBAC + PRP scrubbing; the coaching-notes retriever | `data_access/interface.py`, `sqlite_store.py`, `rbac.py`, `notes_retriever.py`, `vector_store.py` |
+| `synthetic` | Seeded synthetic data generator + CLI (`python -m coach.synthetic.generate`): PRP-flagged HCPs (≥1 guaranteed) and per-(account, brand) metrics + call activity across the five brands | `synthetic/generate.py` |
+| `llm` | Bedrock Claude wrapper + Titan embeddings (model id from config) and the narration step (wording only); offline fakes for tests/demo | `llm/client.py`, `embeddings.py`, `narrate.py` |
+| `components` | The 5 brief builders (ranking, coaching focus, ride-along prep, accounts/context, opener) + the shared signals helper | `components/ranking.py`, `signals.py`, `coaching_focus.py`, `ride_along_prep.py`, `accounts_context.py`, `opener.py` |
+| `orchestrator` | The fixed LangGraph DAG + brief assembly (narrate-before-expose guard + the 5-section rubric) | `orchestrator/brief_graph.py`, `assembly.py` |
+| `observability` | Privacy-safe per-brief audit records + field-level data classification (no out-of-scope data or raw PII in logs) | `observability/audit.py` |
+| `api` | The read-only FastAPI app (identity → `AccessContext`, GET brief endpoints, serves the UI) + an offline demo server | `api/app.py`, `demo.py` |
+| `guardrails` | A PII guardrail seam (planned pass-through → Amazon Bedrock Guardrails) | `guardrails/` *(seam, future enhancement)* |
 
 ---
 
@@ -140,18 +112,19 @@ Defined in `src/coach/data_access/interface.py`. This is the contract every comp
 depends on; concrete stores live behind it.
 
 - **`DataAccess` (Protocol)** — structured reads, each taking an `AccessContext`:
-  `get_reps`, `get_rep`, `get_accounts`, `get_call_activity`, `get_business_metrics`,
-  `get_coaching_sessions`. Implemented by `SqliteStore` (`sqlite_store.py`). **BUILT.**
-- **`Retriever` (Protocol)** — coaching-notes RAG: `search_notes(ctx, rep_id, query, k)`.
-  Interface defined; the FAISS/Chroma implementation is **PLANNED** (T011).
-- **`AccessContext` (frozen dataclass)** — the caller's identity and scope:
-  `user_id`, `role`, `region_id`, `district_id` (set for a DM, `None` for the region-level
-  role), and a legacy `read_only` flag (defaults `False`). **BUILT.** Note: `read_only`
-  predates the confirmation that the region-level role has **full access**; it will be
-  revisited with the role model (T008) and must NOT be read as "the region role is
-  read-only by design."
-- **`ScopeError`** — raised when a read is outside the caller's territory. Defined now;
-  **raising/enforcement is PLANNED** (T008).
+  `get_reps`, `get_rep`, `get_accounts`, `get_account_brand_metrics`, `get_call_activity`,
+  `get_business_metrics`, `get_coaching_sessions`. Implemented by `SqliteStore`
+  (`sqlite_store.py`), which opens a per-thread connection (a small pool) so the parallel
+  section reads are safe.
+- **`Retriever` (Protocol)** — coaching-notes RAG: `search_notes(ctx, rep_id, query, k)`,
+  implemented by `NotesRetriever` (`notes_retriever.py`) over an in-memory vector store.
+- **`AccessContext` (frozen dataclass)** — the caller's identity and scope: `user_id`,
+  `role`, `region_id`, `district_id` (set for a DM), `rep_id` (set for a self-scope rep), and
+  `scope_level` — which is **derived from the role via the single config source**
+  (`ROLE_SCOPE_LEVELS`), not chosen by the caller. There is **no `read_only` flag**: non-rep
+  roles have full access within their scope (region-level roles can take actions, not
+  read-only).
+- **`ScopeError`** — raised on every read that is outside the caller's territory.
 
 **RBAC is enforced HERE — at the data layer, not the UI.** Reads are scoped by territory:
 a DM sees only their own district; the region-level role sees all districts in their region
@@ -159,17 +132,17 @@ with **full access** (it can take actions — not read-only; exact role names RD
 see `docs/project-status.md`). In production the *same* interface sits in front of real
 connectors (Aurora/Athena, Bedrock Knowledge Bases), so callers do not change.
 
-**Current status / honest gaps:** the interface and the SQLite store are built and tested.
-`SqliteStore._allowed_district_ids` already partitions `get_reps` by territory, but the
-single-id reads (`get_rep`, `get_accounts`, etc.) do **not** yet deny out-of-scope access
-— see the `TODO(T008)` marker in `sqlite_store.py`. Hardened enforcement and the dedicated
-RBAC tests are **PLANNED** (T008 implementation, T017 tests).
+**Enforcement:** every read scopes by `AccessContext.scope_level` and **scrubs PRP-flagged
+HCPs** before returning; an out-of-scope (or non-existent) rep raises `ScopeError`, and over
+the API both map to the same `403` so existence is never leaked. PRP scrubbing is re-applied
+in the notes retriever at query time (ADR 0002).
 
 ---
 
 ## 4. Data model
 
-Entities and fields are taken from `src/coach/schemas.py`. **BUILT.**
+Entities and fields are taken from `src/coach/schemas.py`. (This entity-relationship diagram
+is the data model — it is not one of the four architecture diagrams above.)
 
 ```mermaid
 erDiagram
@@ -195,9 +168,9 @@ erDiagram
     USER {
         string user_id PK
         string name
-        enum   role "district_manager or regional_business_director"
+        enum   role "rep / district_manager / region-level / head_of_sales"
         string region_id FK
-        string district_id FK "null for RBD"
+        string district_id FK "null for region-level roles"
     }
     REP {
         string rep_id PK
@@ -253,17 +226,16 @@ erDiagram
 `BusinessMetric` is a derived per-account view (`account_id`, `market_share`,
 `share_trend`, `volume`, `spend`, `performance`) returned by `get_business_metrics`.
 
-**Brand + PRP + per-brand metrics (BUILT — T007A amendment).** Performance is attributable
-to an **(account, brand)** pair: `AccountBrandMetrics` (composite key `account_id` + `brand`)
-holds `market_share`, `share_trend`, `volume`, `spend`, `performance`, `opportunity_level`,
-`risk_flag` per brand, and `CallActivity` carries a `brand`. One account can carry metrics
-across multiple of the five brands. The five brand names live in **one** place — the
-`Brand` enum in `schemas.py` (the single source of truth; no brand string literal exists
-elsewhere in `src/`). `Account.prp` is a boolean prescriber-data-restriction flag: the data
-is present now, but **scrubbing PRP-flagged HCPs is PLANNED at the data-access layer**
-(T008A, FR-020) — see Section 10. The `Account`-level metric fields and
-`get_business_metrics` are retained for now; migrating that read and `AccountFocus` to
-per-brand output is **PLANNED** (T033).
+**Brand + PRP + per-brand metrics.** Performance is attributable to an **(account, brand)**
+pair: `AccountBrandMetrics` (composite key `account_id` + `brand`) holds `market_share`,
+`share_trend`, `volume`, `spend`, `performance`, `opportunity_level`, `risk_flag` per brand,
+and `CallActivity` carries a `brand`. One account can carry metrics across multiple of the
+five brands. The five brand names live in **one** place — the `Brand` enum in `schemas.py`
+(the single source of truth; no brand string literal exists elsewhere in `src/`).
+`Account.prp` is a boolean prescriber-data-restriction flag, and PRP-flagged HCPs are
+**scrubbed at the data-access layer** before any result reaches a field user (FR-020) — see
+Section 10. The accounts/business-context section produces **one `AccountFocus` per
+(account, brand)**, labeled by brand.
 
 **Explainability objects.** `Reason` carries `summary` (non-empty), `signals`
 (`SignalContribution`: signal, `raw_value`, `weight`, `contribution`), and `data_points`
@@ -273,48 +245,40 @@ default, so the schema makes a reason-less recommendation impossible to construc
 
 ---
 
-## 5. Orchestration (LangGraph) — PLANNED
+## 5. Orchestration (LangGraph)
 
-A single explicit LangGraph DAG (no loops) wires the builders. **PLANNED** (T015, plus the
-per-node wiring tasks). The planned design:
+A single explicit LangGraph DAG (no loops) wires the builders (`orchestrator/brief_graph.py`,
+`orchestrator/assembly.py`). The design:
 
 - **Shared state** — one object threaded through the graph: the `AccessContext`, the loaded
   in-scope data, the ranked reps, the selected `rep_id`, and the accumulating brief
   sections (each a recommendation with its `Reason`).
-- **Nodes** — one per builder: `load_data` (scoped read via the data layer), `prioritize`
-  (deterministic ranking, **pure code**), `narrate` (LLM, **writes only `reason.summary`**),
-  then for the selected rep `coaching_focus`, `ride_along_prep`, `accounts_context`,
-  `opener`, and finally `assemble`.
-- **Edges/order** — fixed and linear (a DAG). `assemble` (in `orchestrator/brief.py`)
-  rejects any section whose recommendation lacks a non-empty reason.
-- **Separation rule** — `prioritize` computes ranks/scores in code; the separate `narrate`
-  node may change only `reason.summary` text, never ranks or scores.
+- **Nodes** — `rank` (deterministic ranking, **pure code**, then `narrate` — LLM **writes only
+  `reason.summary`**) → `select_rep` → the section builders `coaching_focus`,
+  `ride_along_prep`, `accounts_context` (run in parallel) → `opener` → `assemble`. The
+  `AccessContext` threads through every node, so RBAC + PRP hold brief-wide and scope is never
+  widened.
+- **Edges/order** — fixed (a DAG, no conditional routing, no agentic loop); same seed +
+  deterministic LLM → the same brief. `assemble` runs the **narrate-before-expose** guard
+  (`assert_narrated`): any section still holding a `PENDING_*` placeholder raises, so a
+  half-written brief can never be returned.
+- **Separation rule** — the scorer computes ranks/scores in code; the separate `narrate` step
+  may change only `reason.summary` text, never ranks or scores.
 - **Per-brand accounts/context** — the `accounts_context` builder reads per-(account, brand)
   rows and produces **one `AccountFocus` per (account, brand)**, labeled by brand, with the
-  behavior-vs-opportunity mismatch evaluated per (account, brand) *(PLANNED, T033)*.
+  behavior-vs-opportunity mismatch evaluated per (account, brand).
 
-```mermaid
-flowchart TD
-    A["load_data<br/>scoped read via data-access layer<br/>(RBAC)"] --> B["prioritize<br/>deterministic scorer — PURE CODE<br/>ranks + scores + Reason"]
-    B --> C["narrate<br/>LLM writes reason.summary ONLY<br/>never ranks/scores"]
-    C --> D{"select rep"}
-    D --> E["coaching_focus"]
-    D --> F["ride_along_prep<br/>RAG over notes"]
-    D --> G["accounts_context"]
-    D --> H["opener<br/>LLM draft"]
-    E --> I["assemble<br/>one brief; every section has a Reason"]
-    F --> I
-    G --> I
-    H --> I
-    I --> J["return CoachingBrief"]
-```
+The node order and the request/response messages are shown in
+**[`diagrams/flow-detailed.svg`](diagrams/flow-detailed.svg)** (the OPEN→CLOSE flow with the
+two safety gates) and **[`diagrams/sequence.svg`](diagrams/sequence.svg)** (who calls whom).
 
 ---
 
-## 6. Deterministic ranking — PLANNED
+## 6. Deterministic ranking
 
-The ranking is a pure function in `components/prioritization.py`. **PLANNED** (T023; tests
-T020, T021, T022a).
+The ranking is a pure function in `components/ranking.py`. How the per-(account, brand)
+signals roll up into one score per rep is shown in
+**[`diagrams/ranking-rollup.svg`](diagrams/ranking-rollup.svg)**.
 
 - **Fixed, visible weights** from `config.settings` (`COACH_WEIGHT_*`, default 0.25 each),
   applied to four signals: **declining share**, **low call activity in key accounts**,
@@ -336,31 +300,35 @@ T020, T021, T022a).
 
 ---
 
-## 7. Coaching-notes RAG — PLANNED
+## 7. Coaching-notes RAG
 
-For ride-along prep (`components/ride_along_prep.py`). **PLANNED** (T010, T011, T030).
+For ride-along prep (`components/ride_along_prep.py`).
 
-- **Embeddings** — Amazon Titan on Bedrock (`llm/embeddings.py`), model id from config.
-- **Vector store** — local FAISS/Chroma behind the `Retriever` Protocol
-  (`data_access/faiss_retriever.py`).
+- **Embeddings** — Amazon Titan on Bedrock (`llm/embeddings.py`), model id from config
+  (a deterministic offline embedder is used for tests/demo).
+- **Vector store** — an in-memory cosine store behind the `Retriever` Protocol
+  (`data_access/notes_retriever.py`), mapping to FAISS / Chroma / Bedrock Knowledge Bases in
+  production.
 - **Use** — retrieve a rep's prior coaching notes, then return structured `agreed_actions`
   / `observe_next`; an `EmptyState` is returned for a rep with no sessions.
-- **Scope** — retrieval is RBAC-scoped like every other read; in production the retriever
-  maps to Bedrock Knowledge Bases / OpenSearch.
+- **Scope** — retrieval re-applies the **same RBAC scope + PRP scrubbing** as every other read
+  (ADR 0002); in production the retriever maps to Bedrock Knowledge Bases / OpenSearch.
 
 ---
 
 ## 8. LLM integration
 
-Claude on **Amazon Bedrock**, via `llm/client.py`. **PLANNED** (T012, T024, T027, T036).
+Claude on **Amazon Bedrock**, via `llm/client.py` (behind a narration seam; an offline
+deterministic narrator is used for tests/demo).
 
 - **Model id from config** — read from `BEDROCK_MODEL_ID` (see `config/settings.py`);
   **never hard-coded** (Constitution VIII). A grep confirms no model literal in `src/`.
-- **Where the LLM IS used:** narrating a structured `Reason` into clear language
-  (`components/narrate.py`); phrasing coaching-focus reason text
-  (`components/coaching_focus.py`); drafting the opener (`components/opener.py`).
+- **Where the LLM IS used:** narrating a structured `Reason` into clear language and drafting
+  the opener / focus text (`llm/narrate.py`). All wording phrases and thresholds come from
+  config, so the prose is visible and tunable.
 - **Where the LLM is NOT used:** the **ranking** — ranks and scores are computed only by
-  the deterministic scorer. The LLM cannot create, reorder, or change them.
+  the deterministic scorer. The LLM cannot create, reorder, or change them (the
+  anti-LLM-ranking guard asserts narration changes only `reason.summary`).
 
 ---
 
@@ -369,56 +337,53 @@ Claude on **Amazon Bedrock**, via `llm/client.py`. **PLANNED** (T012, T024, T027
 Every recommendation carries a structured `Reason` that the UI renders. Enforced at three
 levels:
 
-1. **Schema (BUILT)** — `reason: Reason` is required on `RepRanking`, `CoachingFocus`,
-   `AccountFocus`, and `Opener`; `Reason.summary` has `min_length=1`. Tested by
-   `tests/unit/test_schemas.py` (T019).
-2. **Runtime guard (PLANNED)** — `orchestrator/brief.py` assembly rejects any section whose
-   recommendation lacks a non-empty reason (T015).
-3. **Rubric e2e (PLANNED)** — the 5-section checklist test passes only if all five sections
-   are present and each shows a visible reason (T038).
+1. **Schema** — `reason: Reason` is required on `RepRanking`, `CoachingFocus`,
+   `AccountFocus`, and `Opener`; `Reason.summary` has `min_length=1`.
+2. **Runtime guard** — `orchestrator/assembly.py` runs `assert_narrated` and the rubric over
+   the assembled brief, rejecting any section whose recommendation lacks a visible, non-empty,
+   non-placeholder reason.
+3. **Rubric e2e** — the 5-section checklist test passes only if all five sections are present
+   and each shows a visible reason; the API and UI both re-assert no placeholder is exposed.
 
 ---
 
 ## 10. Security, privacy, guardrails
 
-- **RBAC at the data layer** — scope enforced in `data_access`, not the UI (Section 3).
-  Built for `get_reps`; full enforcement + denial is **PLANNED** (T008/T017). The
-  region-level role has **full access** (can take actions), not read-only; exact role names
-  (RD, RBE) are pending confirmation — see `docs/project-status.md`.
-- **PRP scrubbing (PLANNED, T008A)** — HCPs flagged `prp = true` are removed at the
-  data-access layer (along with their `account_brand_metrics` and `call_activity` rows)
-  before any result reaches a field user (FR-020). The `prp` flag is modeled now; scrubbing
-  is the next phase.
-- **Field-level data classification (PLANNED, T014)** — rep fields = HR-sensitive; HCP
-  fields = private (IQVIA/PDRP). The audit logger uses this to know which fields must never
-  be emitted (FR-016).
-- **No sensitive fields in logs (PLANNED, T040)** — audit records carry no out-of-scope
-  data and no raw PII; a privacy-in-logging test asserts rep/HCP-sensitive fields are never
-  serialized outside their allowed scope.
-- **Guardrails (PLANNED, T013)** — a PII guardrail seam (`guardrails/pii.py`), pass-through
-  in the MVP, mapping to **Amazon Bedrock Guardrails** in production.
-- **Synthetic-only (BUILT + PLANNED)** — data is labeled `synthetic=true`
-  (`GenerationMeta`); a **git pre-commit hook** (`.githooks/pre-commit`) blocks committing
-  files that look like real data **(BUILT)**; a synthetic-only e2e test asserts every
-  response is synthetic and no real connector is configured **(PLANNED, T041)**.
+- **RBAC at the data layer** — scope enforced in `data_access` on every read, not the UI
+  (Section 3); an out-of-scope read raises `ScopeError`, and over the API an out-of-scope rep
+  is a `403` indistinguishable from not-found (existence is never leaked). The region-level
+  role has **full access** (can take actions), not read-only; exact role names (RD, RBE) are
+  pending confirmation — see `docs/project-status.md`.
+- **PRP scrubbing** — HCPs flagged `prp = true` are removed at the data-access layer (along
+  with their `account_brand_metrics` and `call_activity` rows) before any result reaches a
+  field user (FR-020); the notes retriever re-applies the same scrub at query time.
+- **Field-level data classification** — rep fields = HR-sensitive; HCP fields = private
+  (IQVIA/PDRP). The audit logger uses this to know which fields must never be emitted (FR-016).
+- **No sensitive fields in logs** — audit records carry no out-of-scope data and no raw PII;
+  `build_audit_record` emits only an allow-list of safe identifiers/metadata and refuses any
+  sensitive field by construction.
+- **Guardrails** — a PII guardrail seam (`guardrails/pii.py`) is a planned pass-through that
+  maps to **Amazon Bedrock Guardrails** in production.
+- **Synthetic-only** — data is labeled `synthetic=true` (`GenerationMeta`), and a **git
+  pre-commit hook** (`.githooks/pre-commit`) blocks committing files that look like real data.
 
 ---
 
 ## 11. Testing strategy
 
-pytest, organized as a pyramid under `tests/`.
+pytest, organized as a pyramid under `tests/` (`uv run pytest`). The current passing count and
+the per-test breakdown are tracked in [`docs/project-status.md`](project-status.md).
 
-- **Unit (BUILT today):** `tests/unit/test_data_access.py` and
-  `tests/unit/test_schemas.py`. **22 tests pass** (Phase 1, incl. the PRP + per-brand
-  assertions added by the T007A/T009 amendment).
-- **Unit (PLANNED):** deterministic scorer (T020), RBAC (T017), fairness (T022a).
-- **Component (PLANNED):** one per builder against seeded data (T021, T022, T026, T029,
-  T032, T035), including the golden/anti-LLM-ranking guard (T021).
-- **End-to-end (PLANNED):** full brief + the **5-section checklist rubric** (T038), audit /
-  privacy-in-logging (T040), synthetic-only (T041), quickstart scenarios (T042).
-- **Cross-cutting checks:** seeded **determinism** (same seed → identical data; built and
-  tested today), the **fairness** test, the **anti-LLM-ranking** guard, **privacy-in-
-  logging**, and the **consistency** check (same DM → identical brief skeleton, T038).
+- **Unit** — schemas, the data-access layer, RBAC scope levels, PRP scrubbing, and the
+  deterministic scorer (incl. the golden fixture).
+- **Component** — one per builder against seeded data (coaching focus, notes retriever,
+  ride-along prep, accounts/context, opener).
+- **End-to-end** — the full brief + the **5-section checklist rubric**, the read-only API
+  (RBAC/PRP/403, narrate-before-expose, per-request connection), privacy-in-logging / audit,
+  and the web UI smoke + FR-010 reason-on-every-section check.
+- **Cross-cutting checks** — seeded **determinism** (same seed → identical data), the
+  **fairness** test, the **anti-LLM-ranking** guard, **privacy-in-logging**, and the
+  **consistency** check (same DM → identical brief).
 
 ---
 
@@ -429,11 +394,12 @@ pytest, organized as a pyramid under `tests/`.
   `./data/coach.db`), `COACH_SEED` (default 42), and `COACH_WEIGHT_*` ranking weights.
 - **Environment / deps** — [`uv`](https://docs.astral.sh/uv/): `uv sync` to install;
   `uv run pytest` to test; `uv run ruff check --fix . && uv run ruff format .` to lint.
-- **Data generator CLI (BUILT)** — `uv run python -m coach.synthetic.generate --seed 42`
+- **Data generator CLI** — `uv run python -m coach.synthetic.generate --seed 42`
   writes the seeded dataset through the store to `--db` (default `COACH_DB_PATH`) and prints
   per-table counts.
-- **API entrypoint (PLANNED)** — `uvicorn coach.api.app:app --reload`
-  (`coach.api.app:app`); not runnable yet.
+- **API entrypoint** — `uvicorn coach.api.app:app --reload` (production wiring, needs Bedrock
+  config), or the **offline demo** `uvicorn coach.api.demo:app --reload` (auto-seeds synthetic
+  data + offline narrator/embeddings — serves the read-only page at `/` with no AWS).
 
 ---
 
@@ -452,5 +418,5 @@ Each MVP piece is built to swap for a managed AWS service behind the same interf
 
 ---
 
-*Last verified against the repo at Phase 1 (foundation complete, incl. the PRP + brand
-amendment; 22 unit tests passing).*
+*This doc describes the complete target architecture. For the current build status — which
+phases are done and what is planned next — see [`docs/project-status.md`](project-status.md).*
