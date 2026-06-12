@@ -16,10 +16,15 @@ from dataclasses import replace
 import pytest
 
 from coach.components.ranking import PENDING_SUMMARY, rank_reps
-from coach.config.settings import get_settings
+from coach.config.settings import (
+    RANKING_HIGH_PRIORITY_CLOSING,
+    RANKING_LOW_PRIORITY_CLOSING,
+    RANKING_NO_GAP_SUMMARY,
+    get_settings,
+)
 from coach.data_access.interface import AccessContext
 from coach.data_access.sqlite_store import SqliteStore
-from coach.llm.narrate import narrate_rankings
+from coach.llm.narrate import narrate_rankings, offline_ranking_summary
 from coach.schemas import Role, SignalName
 from coach.synthetic import generate
 
@@ -187,5 +192,73 @@ def test_llm_narration_changes_only_summary(store):
             a["reason"]["summary"]
             == "Share is slipping in key accounts and a follow-up was missed."
         )
+        a["reason"]["summary"] = b["reason"]["summary"]
+        assert a == b
+
+
+# ------------------------------------ priority-aware ranking narration (wording only)
+class OfflineNarrator:
+    """Deterministic offline narrator — the SAME priority-aware wording the demo uses."""
+
+    def narrate(self, reason_input: dict, instruction: str) -> str:
+        return offline_ranking_summary(reason_input)
+
+
+def _narrated_d1(store):
+    s, _ = store
+    return narrate_rankings(rank_reps(_dm_ctx(), s), OfflineNarrator())
+
+
+def test_no_gap_rep_is_not_called_the_priority(store):
+    # A rep with NO triggered signal (score 0) gets the config no-gap summary and is never
+    # described as "the priority" / urgent for a ride-along.
+    zero = [r for r in _narrated_d1(store) if r.total_score == 0.0]
+    assert zero, "seed (District 1) should include at least one zero-score, no-gap rep"
+    for r in zero:
+        assert r.reason.summary == RANKING_NO_GAP_SUMMARY
+        text = r.reason.summary.lower()
+        assert "the priority" not in text
+        assert "priority for a ride-along" not in text
+
+
+def test_high_score_rep_gets_high_priority_closing(store):
+    settings = get_settings()
+    high = [
+        r for r in _narrated_d1(store) if r.total_score >= settings.ranking_high_priority_threshold
+    ]
+    assert high, "seed (District 1) should include a high-score rep"
+    for r in high:
+        assert r.reason.summary.startswith("This rep stands out on ")
+        assert r.reason.summary.endswith(RANKING_HIGH_PRIORITY_CLOSING)
+
+
+def test_low_but_nonzero_rep_gets_worth_attention_closing(store):
+    settings = get_settings()
+    low = [
+        r
+        for r in _narrated_d1(store)
+        if 0.0 < r.total_score < settings.ranking_high_priority_threshold
+    ]
+    assert low, "seed (District 1) should include a low-but-nonzero rep"
+    for r in low:
+        assert r.reason.summary.startswith("This rep stands out on ")
+        assert r.reason.summary.endswith(RANKING_LOW_PRIORITY_CLOSING)
+        assert "the priority" not in r.reason.summary.lower()
+
+
+def test_offline_priority_narration_changes_only_summary(store):
+    # The new priority-aware narrator is still wording-only: ranks, scores, signal values, and
+    # contributors are byte-for-byte unchanged (anti-LLM guard holds for the offline path too).
+    s, _ = store
+    before = rank_reps(_dm_ctx(), s)
+    after = narrate_rankings(before, OfflineNarrator())
+    for b_r, a_r in zip(before, after, strict=True):
+        b, a = b_r.model_dump(), a_r.model_dump()
+        assert a["rank"] == b["rank"]
+        assert a["total_score"] == b["total_score"]
+        assert a["reason"]["signals"] == b["reason"]["signals"]
+        assert a["reason"]["data_points"] == b["reason"]["data_points"]
+        assert b["reason"]["summary"] == PENDING_SUMMARY  # pre-narration placeholder
+        assert a["reason"]["summary"] != PENDING_SUMMARY  # narrated
         a["reason"]["summary"] = b["reason"]["summary"]
         assert a == b

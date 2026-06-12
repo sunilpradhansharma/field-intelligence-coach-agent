@@ -9,6 +9,13 @@ just the `summary` field replaced — every other field is preserved by construc
 
 from __future__ import annotations
 
+from coach.config.settings import (
+    RANKING_HIGH_PRIORITY_CLOSING,
+    RANKING_LOW_PRIORITY_CLOSING,
+    RANKING_NO_GAP_SUMMARY,
+    Settings,
+    get_settings,
+)
 from coach.llm.client import LLM
 from coach.schemas import (
     AccountFocus,
@@ -20,10 +27,48 @@ from coach.schemas import (
 )
 
 _INSTRUCTION = (
-    "Write a short, plain-language reason a district manager will read about why this sales "
-    "rep needs coaching. Use ONLY the structured signals and data points provided — do not "
-    "invent numbers, and do not change any ranking. One or two sentences."
+    "Write a short, plain-language reason a district manager will read about this sales rep's "
+    "coaching priority. Use ONLY the structured signals and data points provided — do not "
+    "invent numbers and do not change any ranking. Describe only what the signals show. If no "
+    "signal is triggered (the rep has no coaching gap), say so plainly — e.g. reinforce current "
+    "strengths — and do NOT call the rep 'the priority' or imply any urgency. Otherwise, match "
+    "the urgency to the score: a high score is a clear priority; a low one is worth attention "
+    "on an upcoming ride. One or two sentences."
 )
+
+# Plain-language phrasing for each signal name (wording only — used by the deterministic offline
+# narrator below; the real Bedrock model is given the structured signals and phrases them itself).
+_SIGNAL_WORDS = {
+    "declining_share": "declining share",
+    "low_call_activity": "low call activity in key accounts",
+    "missed_follow_up": "a missed coaching follow-up",
+    "opportunity_risk": "under-served opportunity/risk",
+}
+
+
+def offline_ranking_summary(reason_input: dict, settings: Settings | None = None) -> str:
+    """Deterministic, config-driven ranking summary for the OFFLINE narrator (demo + tests).
+
+    Wording only: it reads the ALREADY-COMPUTED score + signal contributions from `reason_input`
+    and never recomputes anything. A rep with no triggered signal (every contribution 0) gets the
+    config no-gap summary — and is NEVER called "the priority". A rep with triggered signals gets
+    the "stands out on <top signals>" sentence, closed by a phrase chosen on the config
+    `ranking_high_priority_threshold`. Same input -> same text."""
+    settings = settings or get_settings()
+    signals = reason_input.get("signals", [])
+    triggered = [s for s in signals if (s.get("contribution") or 0) > 0]
+    if not triggered:
+        return RANKING_NO_GAP_SUMMARY
+    top = sorted(triggered, key=lambda s: (-(s.get("contribution") or 0), s.get("signal", "")))[:2]
+    joined = " and ".join(_SIGNAL_WORDS.get(s["signal"], s["signal"]) for s in top)
+    score = reason_input.get("total_score") or 0
+    closing = (
+        RANKING_HIGH_PRIORITY_CLOSING
+        if score >= settings.ranking_high_priority_threshold
+        else RANKING_LOW_PRIORITY_CLOSING
+    )
+    return f"This rep stands out on {joined} {closing}"
+
 
 _FOCUS_INSTRUCTION = (
     "Write a short, plain-language reason a district manager will read for coaching this rep "

@@ -93,6 +93,17 @@ DEFAULT_FOCUS_AREA = "No high-priority coaching gap — reinforce current streng
 # The positive talking point used when a rep has no high-priority signals (opener fallback).
 DEFAULT_OPENER_POINT = "Reinforce current strengths and confirm the day's goals"
 
+# Ranking-narration wording (T024) — visible + tunable, like DEFAULT_FOCUS_AREA / the opener
+# default. The narration is WORDING ONLY; it chooses among these phrases by the ALREADY-COMPUTED
+# score / triggered signals and never changes ranks, scores, or signal values.
+# Used when a rep has NO triggered signal (score 0 / no coaching gap) — never call such a rep
+# "the priority" or imply urgency.
+RANKING_NO_GAP_SUMMARY = "No major coaching gap — reinforce current strengths."
+# Closing phrases for a rep that DOES have triggered signals, chosen by
+# `Settings.ranking_high_priority_threshold` on the normalized 0..1 score.
+RANKING_HIGH_PRIORITY_CLOSING = "— a clear priority for a ride-along today."
+RANKING_LOW_PRIORITY_CLOSING = "— worth attention on an upcoming ride."
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -125,6 +136,12 @@ class Settings:
     # How many top contributing (account, brand) pairs to list in a rep's reason.
     top_contributors: int = field(
         default_factory=lambda: int(os.getenv("COACH_TOP_CONTRIBUTORS", "3"))
+    )
+    # Ranking NARRATION threshold (wording only): a rep whose normalized 0..1 score is at or
+    # above this is described as "a clear priority"; a rep with triggered signals but a score
+    # below it is described as "worth attention". Does NOT affect ranks or scores.
+    ranking_high_priority_threshold: float = field(
+        default_factory=lambda: float(os.getenv("COACH_RANKING_HIGH_PRIORITY_THRESHOLD", "0.5"))
     )
 
     # Coaching-focus selection (T027): fixed catalog (signal -> focus area), trigger

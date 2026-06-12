@@ -19,14 +19,8 @@ from coach.api.app import AppDeps, create_app
 from coach.config.settings import get_settings
 from coach.data_access.sqlite_store import SqliteStore
 from coach.llm.embeddings import FakeEmbeddings
+from coach.llm.narrate import offline_ranking_summary
 from coach.synthetic import generate
-
-_SIGNAL_WORDS = {
-    "declining_share": "declining share",
-    "low_call_activity": "low call activity in key accounts",
-    "missed_follow_up": "a missed coaching follow-up",
-    "opportunity_risk": "under-served opportunity/risk",
-}
 
 
 class DemoNarrator:
@@ -62,12 +56,10 @@ class DemoNarrator:
             if "OPEN" in instruction.upper():
                 return "Pick up on the actions you agreed last time and what you said you'd watch."
             return f"Recent coaching covered {n} prior note(s), with agreed actions to follow up."
-        # Rep ranking (signals present)
+        # Rep ranking (signals present) — priority-aware wording, config-driven (no-gap reps are
+        # not called "the priority"); deterministic. See coach.llm.narrate.offline_ranking_summary.
         if "signals" in ri:
-            ranked = sorted(ri["signals"], key=lambda s: s.get("contribution", 0), reverse=True)
-            top = [_SIGNAL_WORDS.get(s["signal"], s["signal"]) for s in ranked[:2]]
-            joined = " and ".join(top) if top else "the tracked business signals"
-            return f"This rep stands out on {joined} — the priority for a ride-along today."
+            return offline_ranking_summary(ri)
         return "See the supporting signals and data points below."
 
 
