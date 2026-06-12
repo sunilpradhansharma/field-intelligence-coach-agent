@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Morning Coaching Brief — Field Intelligence</title>
+<!--
+  T039 — the minimal read-only web page that renders the coaching brief.
+
+  READ-ONLY (FR-011): this page calls ONLY the GET API (/api/whoami, /api/reps,
+  /api/brief/{rep_id}). There is NO control that writes, mutates, or acts — the brief is a
+  suggestion the DM decides on. It does NOT rank or recompute anything client-side; it renders
+  exactly what the API returns (the API enforces RBAC scope + PRP scrubbing).
+
+  SHOW THE REASON (FR-010): every recommendation — ranked rep, coaching focus, ride-along item,
+  account/mismatch, opener — renders its `reason` (the "why" + the supporting data points).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper:    #f3ecdd;
+    --paper-2:  #ece3d0;
+    --card:     #faf6ec;
+    --ink:      #211d16;
+    --ink-soft: #5a5346;
+    --muted:    #938a78;
+    --line:     #d9cdb4;
+    --line-2:   #e7ddc8;
+    --accent:   #b23a22;   /* vermilion — priority / emphasis */
+    --accent-d: #8a2c19;
+    --gold:     #9a6b15;   /* mismatch flag */
+    --gold-bg:  #f3e6c4;
+    --green:    #4d6a3f;   /* well-served / positive */
+    --prov:     #3f5663;   /* provenance */
+    --shadow:   0 1px 0 rgba(33,29,22,.04), 0 18px 40px -28px rgba(33,29,22,.55);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 12% -10%, #f7f1e4 0%, transparent 60%),
+      radial-gradient(900px 500px at 110% 0%, #efe6d2 0%, transparent 55%),
+      var(--paper);
+    color: var(--ink);
+    font-family: "Newsreader", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.5;
+    letter-spacing: .003em;
+  }
+  ::selection { background: var(--accent); color: #fff; }
+  a { color: inherit; }
+
+  /* ---- masthead ---- */
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 28px 96px; }
+  header.masthead {
+    padding: 34px 0 18px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 6px;
+  }
+  .kicker {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; letter-spacing: .34em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  .masthead-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  h1.title {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 800; font-size: clamp(38px, 6vw, 70px);
+    line-height: .95; letter-spacing: -.02em; margin: 8px 0 0;
+  }
+  h1.title em { font-style: italic; font-weight: 500; color: var(--accent); }
+  .dateline {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px; color: var(--ink-soft); text-align: right; line-height: 1.7;
+    white-space: nowrap;
+  }
+  .dateline b { color: var(--ink); }
+
+  /* ---- identity bar ---- */
+  .identity {
+    display: flex; align-items: center; gap: 18px 22px; flex-wrap: wrap;
+    padding: 16px 0 22px; border-bottom: 1px solid var(--line);
+    margin-bottom: 30px;
+  }
+  .identity .lbl {
+    font-family: "JetBrains Mono", monospace; font-size: 11px;
+    letter-spacing: .2em; text-transform: uppercase; color: var(--muted);
+  }
+  .seg { display: inline-flex; background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+  .seg button {
+    font-family: "JetBrains Mono", monospace; font-size: 12.5px; letter-spacing: .02em;
+    border: 0; background: transparent; color: var(--ink-soft);
+    padding: 7px 14px; border-radius: 999px; cursor: pointer; transition: all .18s ease;
+  }
+  .seg button:hover { color: var(--ink); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); box-shadow: var(--shadow); }
+  .scope-chip {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 10px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 14px; box-shadow: var(--shadow);
+  }
+  .scope-chip .role { font-family: "Fraunces", serif; font-weight: 600; font-size: 15px; }
+  .scope-chip .terr {
+    font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent); background: #f6e7e2;
+    padding: 3px 8px; border-radius: 5px; border: 1px solid #e6c8bf;
+  }
+
+  /* ---- layout ---- */
+  .grid { display: grid; grid-template-columns: minmax(330px, 38%) 1fr; gap: 38px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; gap: 30px; } }
+
+  .rail-head, .brief-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+  .rail-head h2, .brief-head h2 {
+    font-family: "Fraunces", serif; font-weight: 600; font-size: 21px; letter-spacing: -.01em; margin: 0;
+  }
+  .count { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--muted); }
+  aside.rail { position: sticky; top: 20px; }
+  @media (max-width: 900px) { aside.rail { position: static; } }
+
+  /* ---- rep card (ranked list) ---- */
+  .rep {
+    width: 100%; text-align: left; cursor: pointer;
+    background: var(--card); border: 1px solid var(--line-2); border-left: 3px solid var(--line);
+    border-radius: 10px; padding: 15px 16px; margin-bottom: 12px;
+    display: grid; grid-template-columns: auto 1fr; gap: 14px;
+    transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease;
+    animation: rise .5s both;
+  }
+  .rep:hover { border-left-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+  .rep[aria-current="true"] { border-left-color: var(--accent); background: #fbf3ea; box-shadow: var(--shadow); }
+  .rank {
+    font-family: "Fraunces", serif; font-weight: 800; font-size: 30px; line-height: 1;
+    color: var(--ink); min-width: 34px; font-variant-numeric: tabular-nums;
+  }
+  .rep[aria-current="true"] .rank, .rep:hover .rank { color: var(--accent); }
+  .rep .who { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+  .rep .id { font-family: "JetBrains Mono", monospace; font-weight: 600; font-size: 13px; }
+  .rep .score {
+    font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--accent); font-weight: 600;
+  }
+  .rep .why { font-size: 14.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.42; }
+
+  /* ---- brief sections ---- */
+  .brief { min-height: 300px; }
+  .placeholder {
+    border: 1px dashed var(--line); border-radius: 12px; padding: 48px 30px; text-align: center;
+    color: var(--muted); font-style: italic; background: rgba(250,246,236,.5);
+  }
+  section.sec { margin-bottom: 30px; animation: rise .55s both; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 9px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+  .sec-no {
+    font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--accent); letter-spacing: .1em;
+  }
+  .sec-head h3 { font-family: "Fraunces", serif; font-weight: 600; font-size: 24px; letter-spacing: -.015em; margin: 0; }
+  .sec-head .hint { margin-left: auto; font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+
+  .item { background: var(--card); border: 1px solid var(--line-2); border-radius: 11px; padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .item-title { font-family: "Fraunces", serif; font-weight: 600; font-size: 19px; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .brand-tag {
+    font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    background: var(--ink); color: var(--paper); padding: 3px 9px; border-radius: 5px;
+  }
+  .acct-id { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--muted); font-weight: 400; }
+
+  /* ---- the REASON block (FR-010) — present on every recommendation ---- */
+  .reason { border-left: 3px solid var(--accent); padding: 4px 0 4px 15px; margin: 12px 0 0; }
+  .reason .eyebrow {
+    font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: .26em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600; display: block; margin-bottom: 4px;
+  }
+  .reason .summary { font-size: 16px; color: var(--ink); line-height: 1.46; }
+
+  .signals { margin-top: 13px; display: grid; gap: 7px; }
+  .signal { display: grid; grid-template-columns: 168px 1fr auto; align-items: center; gap: 12px; }
+  .signal .name { font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: var(--ink-soft); letter-spacing: .02em; }
+  .bar { height: 7px; background: var(--line-2); border-radius: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-d), var(--accent)); border-radius: 4px; }
+  .signal .nums { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .signal .nums b { color: var(--ink); }
+  @media (max-width: 520px) { .signal { grid-template-columns: 1fr; gap: 3px; } .signal .nums { white-space: normal; } }
+
+  .dps { margin-top: 12px; display: grid; gap: 6px; }
+  .dp {
+    font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: var(--ink-soft);
+    background: var(--paper-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 10px;
+    display: flex; gap: 10px; align-items: baseline; line-height: 1.4;
+  }
+  .dp .val { color: var(--accent); font-weight: 600; }
+  .dp .src { margin-left: auto; color: var(--prov); font-size: 10px; letter-spacing: .04em; white-space: nowrap; }
+
+  /* ---- accounts business context grid ---- */
+  .ctx { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 1px; background: var(--line-2); border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+  .ctx .m { background: var(--card); padding: 9px 11px; }
+  .ctx .m .k { font-family: "JetBrains Mono", monospace; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .ctx .m .v { font-family: "JetBrains Mono", monospace; font-size: 14px; font-weight: 600; color: var(--ink); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .ctx .m .v.neg { color: var(--accent); }
+  .ctx .m .v.pos { color: var(--green); }
+
+  .flag {
+    display: inline-flex; align-items: center; gap: 7px; margin-left: auto;
+    font-family: "JetBrains Mono", monospace; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--gold); background: var(--gold-bg); border: 1px solid #e3cd97; padding: 3px 9px; border-radius: 5px;
+  }
+
+  /* ---- ride-along lists ---- */
+  .ra-group { margin-bottom: 14px; }
+  .ra-group h4 { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 8px; }
+  .note { border-left: 2px solid var(--line); padding: 2px 0 2px 13px; margin-bottom: 9px; }
+  .note .meta { font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .prov { color: var(--prov); border: 1px solid #cdd7dc; border-radius: 4px; padding: 1px 6px; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
+  .note .txt { font-size: 15px; color: var(--ink); margin-top: 3px; }
+  .empty { font-style: italic; color: var(--muted); padding: 6px 0; }
+
+  /* ---- opener ---- */
+  .opener-quote {
+    font-family: "Fraunces", serif; font-style: italic; font-weight: 500; font-size: 22px; line-height: 1.4;
+    color: var(--ink); border: 0; margin: 0; padding: 4px 0 0;
+  }
+  .opener-quote::before { content: "\201C"; color: var(--accent); font-size: 30px; line-height: 0; vertical-align: -.18em; margin-right: 2px; }
+  .tps { margin-top: 14px; display: grid; gap: 8px; }
+  .tp { display: flex; gap: 11px; align-items: baseline; font-size: 15px; }
+  .tp .dot { color: var(--accent); font-weight: 700; }
+  .tp .ref { margin-left: auto; font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--prov); letter-spacing: .04em; white-space: nowrap; }
+
+  /* ---- states ---- */
+  .notice { border: 1px solid var(--line); border-radius: 12px; padding: 40px 30px; text-align: center; background: var(--card); box-shadow: var(--shadow); }
+  .notice .big { font-family: "Fraunces", serif; font-size: 22px; font-weight: 600; }
+  .notice .sub { color: var(--muted); margin-top: 8px; font-size: 15px; }
+  .notice.err { border-color: #e6c8bf; }
+  .notice.err .big { color: var(--accent); }
+
+  .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .syn { color: var(--green); }
+  .suggest-note { color: var(--ink-soft); }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .stagger > * { animation: rise .5s both; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="kicker">Field Intelligence · Coaching Dossier</div>
+    <div class="masthead-row">
+      <h1 class="title">Morning <em>Coaching</em> Brief</h1>
+      <div class="dateline" id="dateline"></div>
+    </div>
+  </header>
+
+  <div class="identity">
+    <span class="lbl">Viewing as</span>
+    <div class="seg" id="userseg" role="group" aria-label="Select caller identity"></div>
+    <div class="scope-chip" id="scopechip" hidden>
+      <span class="role" id="scoperole">—</span>
+      <span class="terr" id="scopeterr">—</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <aside class="rail">
+      <div class="rail-head">
+        <h2>Who to ride with</h2>
+        <span class="count" id="repcount"></span>
+      </div>
+      <div id="replist" class="stagger" aria-live="polite"></div>
+    </aside>
+
+    <main class="brief" id="brief" aria-live="polite">
+      <div class="placeholder">Select a rep to open their full coaching brief.</div>
+    </main>
+  </div>
+
+  <div class="foot">
+    <span class="syn" id="synflag">● synthetic data</span>
+    <span class="suggest-note">Suggestions only — the manager decides. This view is read-only.</span>
+  </div>
+</div>
+
+<script>
+/* ----------------------------------------------------------------------------
+   Read-only client. Calls ONLY the GET API and renders exactly what it returns.
+   No ranking, scoring, or business logic happens here.
+---------------------------------------------------------------------------- */
+const USERS = [
+  { id: "dm_d1",     label: "DM · District 1" },
+  { id: "dm_d2",     label: "DM · District 2" },
+  { id: "region_r1", label: "RD · Region 1" },
+  { id: "hos_1",     label: "Head of Sales" },
+];
+const SIGNAL_LABELS = {
+  declining_share:  "Declining share",
+  low_call_activity:"Low call activity",
+  missed_follow_up: "Missed follow-up",
+  opportunity_risk: "Opportunity / risk",
+};
+const SCOPE_TERR = { district: d => d.district_id, region: d => d.region_id, all: () => "All regions", self: d => d.user_id };
+
+let currentUser = USERS[0].id;
+let currentRep = null;
+
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, cls, txt) => { const n = document.createElement(tag); if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const num = (v, d = 2) => (typeof v === "number" ? v.toFixed(d) : v);
+const headers = () => ({ "X-User-Id": currentUser });
+
+async function api(path) {
+  const res = await fetch(path, { headers: headers() });
+  return { status: res.status, ok: res.ok, body: res.ok ? await res.json() : null };
+}
+
+/* ---- reason block: the FR-010 promise, reused for every recommendation ---- */
+function reasonBlock(reason, { signals = true } = {}) {
+  const box = el("div", "reason");
+  const eb = el("span", "eyebrow", "Why"); box.appendChild(eb);
+  box.appendChild(el("div", "summary", reason.summary || ""));
+
+  if (signals && reason.signals && reason.signals.length) {
+    const wrap = el("div", "signals");
+    for (const s of reason.signals) {
+      const row = el("div", "signal");
+      row.appendChild(el("span", "name", SIGNAL_LABELS[s.signal] || s.signal));
+      const bar = el("div", "bar"); const fill = el("i");
+      fill.style.width = Math.round((s.normalized_value ?? 0) * 100) + "%"; bar.appendChild(fill);
+      row.appendChild(bar);
+      const nums = el("span", "nums");
+      nums.innerHTML = `raw <b>${esc(num(s.raw_value))}</b> · w ${esc(num(s.weight))} · contrib <b>${esc(num(s.contribution, 3))}</b>`;
+      row.appendChild(nums);
+      wrap.appendChild(row);
+    }
+    box.appendChild(wrap);
+  }
+
+  if (reason.data_points && reason.data_points.length) {
+    const dps = el("div", "dps");
+    for (const d of reason.data_points) {
+      const dp = el("div", "dp");
+      dp.appendChild(el("span", "label", d.label));
+      const v = el("span", "val", String(d.value)); dp.appendChild(v);
+      if (d.source) dp.appendChild(el("span", "src", d.source));
+      dps.appendChild(dp);
+    }
+    box.appendChild(dps);
+  }
+  return box;
+}
+
+/* ---- identity + scope ---- */
+function renderUserSeg() {
+  const seg = $("#userseg"); seg.innerHTML = "";
+  for (const u of USERS) {
+    const b = el("button", null, u.label);
+    b.setAttribute("aria-pressed", String(u.id === currentUser));
+    b.onclick = () => selectUser(u.id);
+    seg.appendChild(b);
+  }
+}
+async function loadScope() {
+  const r = await api("/api/whoami");
+  const chip = $("#scopechip");
+  if (!r.ok) { chip.hidden = true; return; }
+  const d = r.body;
+  chip.hidden = false;
+  $("#scoperole").textContent = d.role.replace(/_/g, " ");
+  $("#scopeterr").textContent = (SCOPE_TERR[d.scope_level] ? SCOPE_TERR[d.scope_level](d) : d.scope_level) || d.scope_level;
+}
+
+/* ---- section 1: ranked reps ---- */
+async function loadReps() {
+  const list = $("#replist"); list.innerHTML = "";
+  const r = await api("/api/reps?limit=50");
+  if (!r.ok) { list.appendChild(notice("Could not load reps", "")); return; }
+  const reps = r.body.ranked_reps || [];
+  $("#repcount").textContent = `${reps.length} in scope`;
+  $("#synflag").style.display = r.body.synthetic ? "" : "none";
+  reps.forEach((rep, i) => {
+    const card = el("button", "rep");
+    card.style.animationDelay = (i * 40) + "ms";
+    card.setAttribute("aria-current", String(rep.rep_id === currentRep));
+    card.appendChild(el("div", "rank", String(rep.rank)));
+    const body = el("div");
+    const who = el("div", "who");
+    who.appendChild(el("span", "id", rep.rep_id));
+    who.appendChild(el("span", "score", "score " + num(rep.total_score, 2)));
+    body.appendChild(who);
+    body.appendChild(el("div", "why", rep.reason.summary || ""));
+    card.appendChild(body);
+    card.onclick = () => selectRep(rep.rep_id);
+    list.appendChild(card);
+  });
+  if (!reps.length) list.appendChild(emptyLine("No reps in your scope."));
+}
+
+/* ---- the full brief ---- */
+function sectionHead(no, title, hint) {
+  const h = el("div", "sec-head");
+  h.appendChild(el("span", "sec-no", no));
+  h.appendChild(el("h3", null, title));
+  if (hint) h.appendChild(el("span", "hint", hint));
+  return h;
+}
+function emptyLine(t) { return el("div", "empty", t); }
+function notice(big, sub, isErr) {
+  const n = el("div", "notice" + (isErr ? " err" : ""));
+  n.appendChild(el("div", "big", big));
+  if (sub) n.appendChild(el("div", "sub", sub));
+  return n;
+}
+
+async function selectRep(repId) {
+  currentRep = repId;
+  document.querySelectorAll(".rep").forEach(c => c.setAttribute("aria-current", String(c.querySelector(".id")?.textContent === repId)));
+  const brief = $("#brief"); brief.innerHTML = "";
+  brief.appendChild(el("div", "placeholder", "Opening brief…"));
+
+  const r = await api("/api/brief/" + encodeURIComponent(repId));
+  brief.innerHTML = "";
+  if (r.status === 403) {
+    // FR-014: out-of-scope and not-found are indistinguishable — never reveal existence.
+    brief.appendChild(notice("Not available in your scope", "This rep is outside your territory.", true));
+    return;
+  }
+  if (!r.ok) { brief.appendChild(notice("Brief unavailable", "Please try again.", true)); return; }
+  renderBrief(brief, r.body);
+}
+
+function renderBrief(root, b) {
+  const selected = (b.ranked_reps || []).find(x => x.rep_id === b.selected_rep_id);
+
+  // ---- 01 Priority / why ----
+  const s1 = el("section", "sec");
+  s1.appendChild(sectionHead("01", "Priority", "who to ride with & why"));
+  const head = el("div", "item");
+  const t = el("div", "item-title");
+  t.appendChild(document.createTextNode("Selected rep "));
+  t.appendChild(el("span", "acct-id", b.selected_rep_id));
+  if (selected) t.appendChild(el("span", "brand-tag", "RANK " + selected.rank));
+  head.appendChild(t);
+  if (selected) head.appendChild(reasonBlock(selected.reason, { signals: true }));
+  s1.appendChild(head);
+  root.appendChild(s1);
+
+  // ---- 02 Coaching focus ----
+  const s2 = el("section", "sec");
+  s2.appendChild(sectionHead("02", "Coaching focus", "1–3 areas"));
+  if (b.coaching_focus && b.coaching_focus.length) {
+    for (const f of b.coaching_focus) {
+      const it = el("div", "item");
+      it.appendChild(el("div", "item-title", f.focus_area));
+      it.appendChild(reasonBlock(f.reason, { signals: false }));
+      s2.appendChild(it);
+    }
+  } else s2.appendChild(emptyLine("No high-priority coaching gap — reinforce current strengths."));
+  root.appendChild(s2);
+
+  // ---- 03 Ride-along prep ----
+  const s3 = el("section", "sec");
+  s3.appendChild(sectionHead("03", "Ride-along prep", "continuity"));
+  s3.appendChild(renderRideAlong(b.ride_along_prep));
+  root.appendChild(s3);
+
+  // ---- 04 Accounts & business context ----
+  const s4 = el("section", "sec");
+  s4.appendChild(sectionHead("04", "Accounts & business", "per brand"));
+  if (b.accounts && b.accounts.length) {
+    for (const a of b.accounts) s4.appendChild(renderAccount(a));
+  } else s4.appendChild(emptyLine("No focused accounts to surface for this rep."));
+  root.appendChild(s4);
+
+  // ---- 05 Opener ----
+  const s5 = el("section", "sec");
+  s5.appendChild(sectionHead("05", "Suggested opener", "editable suggestion"));
+  s5.appendChild(renderOpener(b.opener));
+  root.appendChild(s5);
+}
+
+function renderRideAlong(ra) {
+  const box = el("div", "item");
+  if (!ra || ra.has_history === false) {
+    box.appendChild(el("div", "item-title", "No prior coaching history"));
+    box.appendChild(el("div", "empty", (ra && ra.message) || "No prior coaching history yet."));
+    if (ra && ra.reason) box.appendChild(reasonBlock(ra.reason, { signals: false }));
+    return box;
+  }
+  if (ra.opening) {
+    box.appendChild(el("div", "item-title", "Pick up where you left off"));
+    const op = el("div", "opener-quote"); op.textContent = ra.opening; box.appendChild(op);
+  }
+  const groups = [
+    ["Prior notes", ra.prior_notes],
+    ["Agreed actions", ra.agreed_actions],
+    ["Observe next", ra.observe_next],
+  ];
+  for (const [name, items] of groups) {
+    const g = el("div", "ra-group");
+    g.appendChild(el("h4", null, name));
+    if (items && items.length) {
+      for (const n of items) {
+        const note = el("div", "note");
+        const meta = el("div", "meta");
+        if (n.date) meta.appendChild(el("span", null, n.date));
+        if (n.source) meta.appendChild(el("span", "prov", n.source.replace(/_/g, " ")));
+        note.appendChild(meta);
+        note.appendChild(el("div", "txt", n.text));
+        g.appendChild(note);
+      }
+    } else g.appendChild(el("div", "empty", "Not recorded."));
+    box.appendChild(g);
+  }
+  if (ra.reason) box.appendChild(reasonBlock(ra.reason, { signals: false }));
+  return box;
+}
+
+function renderAccount(a) {
+  const it = el("div", "item");
+  const t = el("div", "item-title");
+  t.appendChild(el("span", "brand-tag", a.brand));
+  t.appendChild(el("span", "acct-id", a.account_id));
+  if (a.mismatch_flag) {
+    const f = el("span", "flag"); f.textContent = "⚑ Behaviour-vs-opportunity mismatch"; t.appendChild(f);
+  }
+  it.appendChild(t);
+
+  const c = a.context || {};
+  const ctx = el("div", "ctx");
+  const metric = (k, v, cls) => {
+    const m = el("div", "m");
+    m.appendChild(el("div", "k", k));
+    const val = el("div", "v" + (cls ? " " + cls : "")); val.textContent = v; m.appendChild(val);
+    ctx.appendChild(m);
+  };
+  metric("Share", (c.market_share != null ? (c.market_share * 100).toFixed(1) + "%" : "—"));
+  metric("Share trend", (c.share_trend != null ? (c.share_trend > 0 ? "+" : "") + (c.share_trend * 100).toFixed(1) + "%" : "—"), c.share_trend < 0 ? "neg" : "pos");
+  metric("Volume", c.volume != null ? Math.round(c.volume).toLocaleString() : "—");
+  metric("Spend", c.spend != null ? "$" + Math.round(c.spend).toLocaleString() : "—");
+  metric("Perf", c.performance || "—");
+  metric("Opp", c.opportunity_level || "—");
+  metric("Calls", c.calls != null ? c.calls : "—", c.calls === 0 ? "neg" : "");
+  metric("Calls trend", c.calls_trend != null ? (c.calls_trend > 0 ? "+" : "") + c.calls_trend.toFixed(2) : "—", c.calls_trend < 0 ? "neg" : "pos");
+  it.appendChild(ctx);
+
+  if (a.reason) it.appendChild(reasonBlock(a.reason, { signals: false }));
+  return it;
+}
+
+function renderOpener(op) {
+  const box = el("div", "item");
+  if (!op) { box.appendChild(emptyLine("No opener available.")); return box; }
+  const q = el("blockquote", "opener-quote"); q.textContent = op.text; box.appendChild(q);
+  if (op.talking_points && op.talking_points.length) {
+    const tps = el("div", "tps");
+    for (const p of op.talking_points) {
+      const tp = el("div", "tp");
+      tp.appendChild(el("span", "dot", "—"));
+      tp.appendChild(el("span", "txt", p.text));
+      if (p.source || p.ref) tp.appendChild(el("span", "ref", [p.source, p.ref].filter(Boolean).join(" · ")));
+      tps.appendChild(tp);
+    }
+    box.appendChild(tps);
+  }
+  if (op.reason) box.appendChild(reasonBlock(op.reason, { signals: false }));
+  return box;
+}
+
+/* ---- orchestration ---- */
+async function selectUser(id) {
+  currentUser = id; currentRep = null;
+  renderUserSeg();
+  $("#brief").innerHTML = '<div class="placeholder">Select a rep to open their full coaching brief.</div>';
+  await Promise.all([loadScope(), loadReps()]);
+}
+
+function init() {
+  const now = new Date();
+  $("#dateline").innerHTML = `<b>${now.toLocaleDateString(undefined, { weekday: "long" })}</b><br>${now.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}`;
+  renderUserSeg();
+  selectUser(currentUser);
+}
+init();
+</script>
+</body>
+</html>

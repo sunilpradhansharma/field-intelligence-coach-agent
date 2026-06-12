@@ -27,9 +27,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from coach.components.ranking import rank_reps
 from coach.config.settings import Settings, get_settings
@@ -49,6 +50,10 @@ from coach.orchestrator.brief_graph import build_brief
 from coach.schemas import RepRanking, Role
 
 _log = logging.getLogger("coach.api")
+
+# The read-only web UI (T039). Served from the FastAPI app so it is same-origin with the GET
+# API (no CORS) and adds no new data path — it is a static page that calls the GET endpoints.
+_WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 
 
 # --------------------------------------------------------------------------- lazy Bedrock seams
@@ -266,6 +271,14 @@ def create_app(deps: AppDeps | None = None) -> FastAPI:
             accounts_count=len(brief.accounts),
         )
         return brief.model_dump()
+
+    # --------------------------------------------------------------------- the web UI (T039)
+    @app.get("/", response_class=HTMLResponse)
+    def index() -> HTMLResponse:
+        """Serve the minimal read-only brief page. It is a static page that calls only the GET
+        API above (no write/action controls — FR-011) and renders exactly what the API returns
+        (no client-side ranking/recompute)."""
+        return HTMLResponse((_WEB_DIR / "index.html").read_text(encoding="utf-8"))
 
     return app
 
