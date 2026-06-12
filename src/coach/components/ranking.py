@@ -25,9 +25,10 @@ Rationale + options considered: docs/adr/0001-signal-normalization.md.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from coach.components.signals import RowSignal, compute_rep_signals, row_data_point
+from coach.components.summit import summit_insights_for_reps
 from coach.config.settings import Settings, get_settings
 from coach.data_access.interface import AccessContext, DataAccess
 from coach.schemas import (
@@ -43,13 +44,17 @@ from coach.schemas import (
 # explicit sentinel; T024 narration overwrites ONLY this field.
 PENDING_SUMMARY = "(reason summary pending narration)"
 
-# Fixed signal order — iterated explicitly (never dict order) so output is deterministic.
+# The four CORE business signals — iterated explicitly (never dict order) so output is
+# deterministic. Summit (capability #5) is an OPTIONAL 5th signal, appended only when configured
+# with a non-zero weight (see `_apply_summit`); these four are the MVP ranking and are unchanged
+# when Summit is off.
 _SIGNAL_ORDER = (
     SignalName.declining_share,
     SignalName.low_call_activity,
     SignalName.missed_follow_up,
     SignalName.opportunity_risk,
 )
+CORE_SIGNALS = _SIGNAL_ORDER  # the four MVP signals (Summit is added on top only when weighted)
 
 
 @dataclass(frozen=True)
@@ -107,6 +112,48 @@ def _top_contributor_points(rows: list[RowSignal], top_n: int) -> list[DataPoint
     return points
 
 
+def _apply_summit(
+    ctx: AccessContext,
+    data: DataAccess,
+    settings: Settings,
+    scored: list[_Scored],
+    weight: float,
+) -> list[_Scored]:
+    """Fold the Summit opportunity (capability #5) into the rep scores via the SAME normalized
+    rollup (ADR 0001): raw = the district ranking LIFT (positions gained), normalized 0..1 via the
+    config cap, contribution = normalized × the config weight. The deterministic lift is computed
+    in `components/summit.py` (per-team config formula) — the LLM is NOT involved. Appends a
+    Summit `SignalContribution` + the targeted (account, brand) movements to each rep's reason."""
+    insights = summit_insights_for_reps(ctx, data, [s.rep_id for s in scored], settings)
+    cap = settings.ranking_norm_caps[SignalName.summit_opportunity.value]
+    out: list[_Scored] = []
+    for s in scored:
+        insight = insights.get(s.rep_id)
+        if insight is None:
+            out.append(s)
+            continue
+        raw = float(insight.lift)
+        normalized = round(min(raw, cap) / cap, 6) if cap > 0 else 0.0
+        contribution = round(normalized * weight, 6)
+        summit_signal = SignalContribution(
+            signal=SignalName.summit_opportunity,
+            raw_value=raw,
+            normalized_value=normalized,
+            weight=weight,
+            contribution=contribution,
+        )
+        new_reason = s.reason.model_copy(
+            update={
+                "signals": [*s.reason.signals, summit_signal],
+                "data_points": [*s.reason.data_points, *insight.reason.data_points],
+            }
+        )
+        out.append(
+            replace(s, total_score=round(s.total_score + contribution, 6), reason=new_reason)
+        )
+    return out
+
+
 def rank_reps(
     ctx: AccessContext, data: DataAccess, settings: Settings | None = None
 ) -> list[RepRanking]:
@@ -114,9 +161,16 @@ def rank_reps(
 
     Reads only through `data` (the data-access layer). Deterministic for a fixed dataset.
     Tie-break (documented, data-model.md): total_score desc, opportunity_risk desc, rep_id asc.
+
+    The four core signals are always scored; the **Summit** opportunity (capability #5) is folded
+    in ONLY when `ranking_weights["summit_opportunity"]` is non-zero (OFF by default), so the MVP
+    ranking is unchanged unless Summit is configured on.
     """
     settings = settings or get_settings()
     scored = [_score_rep(ctx, data, rep.rep_id, settings) for rep in data.get_reps(ctx)]
+    summit_weight = settings.ranking_weights.get(SignalName.summit_opportunity.value, 0.0)
+    if summit_weight > 0:
+        scored = _apply_summit(ctx, data, settings, scored, summit_weight)
     scored.sort(key=lambda s: (-s.total_score, -s.opportunity_risk_value, s.rep_id))
     return [
         RepRanking(rep_id=s.rep_id, rank=i + 1, total_score=s.total_score, reason=s.reason)

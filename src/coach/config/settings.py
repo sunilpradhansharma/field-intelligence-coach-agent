@@ -39,6 +39,9 @@ def _default_weights() -> dict[str, float]:
         "low_call_activity": float(os.getenv("COACH_WEIGHT_LOW_CALL_ACTIVITY", "0.25")),
         "missed_follow_up": float(os.getenv("COACH_WEIGHT_MISSED_FOLLOW_UP", "0.25")),
         "opportunity_risk": float(os.getenv("COACH_WEIGHT_OPPORTUNITY_RISK", "0.25")),
+        # Phase 8 Summit opportunity — OFF by default (0.0): the four core signals are unchanged
+        # until a non-zero weight folds Summit into the SAME normalized rollup (ADR 0001).
+        "summit_opportunity": float(os.getenv("COACH_WEIGHT_SUMMIT", "0.0")),
     }
 
 
@@ -61,6 +64,8 @@ def _default_norm_caps() -> dict[str, float]:
         "missed_follow_up": float(os.getenv("COACH_NORM_CAP_MISSED_FOLLOW_UP", "3")),
         # count of (risk OR high-opportunity) under-served rows
         "opportunity_risk": float(os.getenv("COACH_NORM_CAP_OPPORTUNITY_RISK", "10")),
+        # Phase 8 Summit: district ranking positions a rep's focus could gain (saturates at cap)
+        "summit_opportunity": float(os.getenv("COACH_NORM_CAP_SUMMIT", "3")),
     }
 
 
@@ -84,6 +89,41 @@ def _default_focus_thresholds() -> dict[str, float]:
         "low_call_activity": float(os.getenv("COACH_FOCUS_MIN_LOW_CALL_ACTIVITY", "1")),
         "missed_follow_up": float(os.getenv("COACH_FOCUS_MIN_MISSED_FOLLOW_UP", "1")),
         "opportunity_risk": float(os.getenv("COACH_FOCUS_MIN_OPPORTUNITY_RISK", "1")),
+    }
+
+
+@dataclass(frozen=True)
+class SummitFormula:
+    """A per-TEAM Summit scoring formula (Phase 8 / capability #5).
+
+    **PLACEHOLDER coefficients — representative only, NOT a real IC plan.** The business will
+    supply each team's real Summit / IC-plan logic; this is an ASSUMPTION to be confirmed (see
+    spec.md → Future Capabilities and docs/project-status.md). It is **config-swappable per team
+    WITHOUT any code change** — the engine (`components/summit.py`) reads coefficients from here
+    and never hard-codes a team's numbers. Applied to a district's aggregated (account, brand)
+    inputs to produce a Summit score; districts are then ranked by that score.
+    """
+
+    share_weight: float = 100.0  # × mean market share across the district's (account, brand) rows
+    volume_weight: float = 0.002  # × total volume
+    decline_penalty: float = 40.0  # × total share-decline magnitude (penalizes decline)
+    calls_weight: float = 0.5  # × total calls
+    # TUNABLE MODELING ASSUMPTION (per team): in the what-if lift, how much of a halted decline
+    # is assumed to come back. 1.0 = full recovery (a halted decline is fully regained — the
+    # optimistic default); 0.5 = half comes back; 0.0 = no recovery. The business may set a more
+    # conservative value per team without any code change.
+    recovery_fraction: float = 1.0
+
+
+def _default_summit_formulas() -> dict[str, SummitFormula]:
+    """Per-TEAM Summit formulas (team = district id). `"default"` applies to any team without an
+    explicit entry. PLACEHOLDER until the business supplies the real per-team formulas; add or
+    override a team's coefficients here (config-only, no engine change). The default
+    `recovery_fraction` is env-overridable (`COACH_SUMMIT_RECOVERY_FRACTION`)."""
+    return {
+        "default": SummitFormula(
+            recovery_fraction=float(os.getenv("COACH_SUMMIT_RECOVERY_FRACTION", "1.0"))
+        )
     }
 
 
@@ -182,6 +222,16 @@ class Settings:
     # env-overridable; it is a tunable privacy control, not a display preference.
     aggregation_min_cell: int = field(
         default_factory=lambda: int(os.getenv("COACH_AGGREGATION_MIN_CELL", "3"))
+    )
+
+    # Summit optimization (Phase 8 / capability #5). Per-TEAM (district) scoring formulas — a
+    # representative PLACEHOLDER until the business supplies the real per-team logic; swap/extend
+    # per team via config, no engine change. The Summit signal is OFF by default (weight 0.0 in
+    # `ranking_weights`), so the four-signal ranking is unchanged until it is configured on.
+    summit_formulas: dict[str, SummitFormula] = field(default_factory=_default_summit_formulas)
+    # How many top declining (account, brand) rows a rep's Summit insight targets.
+    summit_max_targets: int = field(
+        default_factory=lambda: int(os.getenv("COACH_SUMMIT_MAX_TARGETS", "3"))
     )
 
 

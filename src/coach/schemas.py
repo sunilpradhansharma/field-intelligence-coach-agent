@@ -75,6 +75,9 @@ class SignalName(StrEnum):
     low_call_activity = "low_call_activity"
     missed_follow_up = "missed_follow_up"
     opportunity_risk = "opportunity_risk"
+    # Phase 8 / capability #5 — the Summit/IC-plan ranking-lift opportunity. OFF by default
+    # (config weight 0.0); the four signals above are the MVP core. Deterministic, code-computed.
+    summit_opportunity = "summit_opportunity"
 
 
 # ---------------------------------------------------------------------- entities
@@ -363,6 +366,34 @@ class ThemeAggregate(BaseModel):
     generated_for: GeneratedFor
     rep_count: int  # total in-scope reps (the denominator for the shares)
     themes: list[Theme]  # ranked, most common first
+    synthetic: bool = True
+
+
+# -------------------------------------------- Summit optimization (Phase 8 / capability #5)
+class SummitTarget(BaseModel):
+    """One (account, brand) movement that drives the Summit ranking lift (raw numbers shown)."""
+
+    account_id: str
+    brand: Brand
+    share_trend: float  # current signed trend (negative = declining)
+    projected_share_trend: float  # after the modeled improvement (decline halted -> 0.0)
+    decline_reduced: float  # district share-decline magnitude this movement removes
+
+
+class SummitInsight(BaseModel):
+    """Where a rep can focus to move their district's **Summit ranking** the most (capability #5).
+
+    Computed DETERMINISTICALLY in code from a per-team config formula — the LLM never decides the
+    lift or the ranking, it only narrates `reason.summary`. Pure data, suggestion-only (FR-011)."""
+
+    rep_id: str
+    district_id: str
+    team_formula: str  # which per-team formula key was applied (transparency)
+    baseline_position: int  # the district's current Summit ranking position (1 = top)
+    projected_position: int  # the position after the modeled improvement on the targets
+    lift: int  # positions gained (baseline - projected), >= 0
+    targets: list[SummitTarget]  # the highest-lift (account, brand) movements to focus on
+    reason: Reason  # summary (LLM) + data points (the movements + the ranking change), raw numbers
     synthetic: bool = True
 
 

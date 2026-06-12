@@ -15,7 +15,7 @@ from dataclasses import replace
 
 import pytest
 
-from coach.components.ranking import PENDING_SUMMARY, rank_reps
+from coach.components.ranking import CORE_SIGNALS, PENDING_SUMMARY, rank_reps
 from coach.config.settings import (
     RANKING_HIGH_PRIORITY_CLOSING,
     RANKING_LOW_PRIORITY_CLOSING,
@@ -145,7 +145,8 @@ def test_every_ranking_has_structured_reason(store):
         assert rankings
         for r in rankings:
             assert r.reason.summary  # non-empty (FR-010)
-            assert {sc.signal for sc in r.reason.signals} == set(SignalName)  # all 4 signals
+            # Default config: the four CORE signals (Summit is OFF unless its weight is non-zero).
+            assert {sc.signal for sc in r.reason.signals} == set(CORE_SIGNALS)
             assert len(r.reason.signals) == 4
             assert len(r.reason.data_points) >= 1  # at least one top-contributor/explainer
 

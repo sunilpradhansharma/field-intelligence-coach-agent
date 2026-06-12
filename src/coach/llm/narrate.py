@@ -24,6 +24,7 @@ from coach.schemas import (
     Opener,
     RepRanking,
     RideAlongPrep,
+    SummitInsight,
     Theme,
 )
 
@@ -268,3 +269,34 @@ def narrate_theme(theme: Theme, llm: LLM) -> Theme:
 
 def narrate_themes(themes: list[Theme], llm: LLM) -> list[Theme]:
     return [narrate_theme(t, llm) for t in themes]
+
+
+_SUMMIT_INSTRUCTION = (
+    "Write a short, plain-language note for a district manager about where this rep can focus to "
+    "move the district's Summit ranking the most. Use ONLY the targeted accounts and the ranking "
+    "lift provided — do not invent numbers, and do not change the ranking or the lift. One or two "
+    "sentences."
+)
+
+
+def _summit_input(insight: SummitInsight) -> dict:
+    """Read-only facts handed to the LLM — the computed lift + targets. It may phrase them; it
+    may not alter the numbers, targets, or the ranking change."""
+    return {
+        "district_id": insight.district_id,
+        "baseline_position": insight.baseline_position,
+        "projected_position": insight.projected_position,
+        "lift": insight.lift,
+        "targets": [t.model_dump() for t in insight.targets],
+    }
+
+
+def narrate_summit(insight: SummitInsight, llm: LLM) -> SummitInsight:
+    """Return a copy of `insight` with ONLY `reason.summary` replaced by LLM prose. The computed
+    lift, the targeted (account, brand) movements, the baseline/projected positions, and the data
+    points are preserved by construction (the LLM cannot change the numbers or the ranking)."""
+    summary = llm.narrate(_summit_input(insight), _SUMMIT_INSTRUCTION).strip()
+    if not summary:
+        summary = insight.reason.summary  # schema requires a non-empty summary; keep prior
+    new_reason = insight.reason.model_copy(update={"summary": summary})
+    return insight.model_copy(update={"reason": new_reason})
