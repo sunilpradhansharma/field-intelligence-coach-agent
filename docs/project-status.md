@@ -25,10 +25,10 @@ synthetic.
 
 ## 2. Current status — BUILT (in the repo now)
 
-**Phases 1–5 are COMPLETE and tested (the data-access layer, RBAC + PRP, the deterministic
-ranking, all five brief sections, the brief orchestrator + assembly + 5-section rubric, and
-the read-only FastAPI API). Phase 5 is DONE — both Step 5a (orchestrator + assembly + rubric)
-and Step 5b (the read-only API). Next is Phase 6 (the minimal web UI).** `pytest` → **120 passed**.
+**Phases 1–6 are COMPLETE and tested — the MVP (the morning coaching brief) is now
+FEATURE-COMPLETE end to end:** synthetic data → RBAC/PRP data-access layer → deterministic
+ranking → the five brief sections → the orchestrated, narrated, validated brief → the read-only
+FastAPI API → the read-only web UI. `pytest` → **125 passed**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -302,6 +302,38 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   run fully offline with fakes; production uses Bedrock behind a lazy seam (model id from config,
   never hard-coded), and `app = create_app()` imports without AWS credentials.
 
+### Phase 6 (COMPLETE) — the read-only web UI — task T039
+(`web/index.html`, served at `GET /` by `src/coach/api/app.py`; FR-010/FR-011/FR-014/FR-018):
+- **A minimal, read-only single page** — vanilla HTML/CSS/JS (no framework), served same-origin
+  by the FastAPI app so it shares the GET API with no CORS. It calls **only the GET endpoints**
+  (`/api/whoami`, `/api/reps`, `/api/brief/{rep_id}`) — **no write/action/mutation control of any
+  kind** (FR-011, suggestion-only). The whole app surface stays GET-only (enforced by a test).
+- **The viewer acts as a seeded user, not a scope** — a selector of `dm_d1` / `dm_d2` /
+  `region_r1` / `hos_1` sets the `X-User-Id`; the **API derives role → scope** and enforces it.
+  The UI never sets or widens scope; a scope chip shows the role + territory from `/api/whoami`.
+- **Section 1 rail** — the ranked reps for the caller's scope, each with its **priority reason**.
+  Opening a rep loads the **full five-section brief**: priority/why (signals as bars with
+  raw/weight/contribution + data points), coaching focus, ride-along prep (prior notes / agreed
+  actions / observe-next, **each with provenance**), accounts + **per-(account, brand) context**
+  (share, trend, volume, spend, perf, opp, calls, calls-trend) with the **mismatch flag** and
+  **brand labels (e.g. LILETTA)**, and the suggested opener (line + talking points).
+- **Shows the REASON under every recommendation (FR-010)** — one reusable reason block (the
+  "why" + signals + data points) is rendered for all five sections; tested to carry a
+  non-placeholder reason on each.
+- **Renders only what the API returns** — the browser does **no business logic, ranking, scoring,
+  or re-ordering**; it displays the API's `rank` / `total_score` / lists as-is (no client-side
+  `sort`, no score math).
+- **Clean edge / `403` states** — an out-of-scope (or non-existent) rep surfaces a neutral
+  **"Not available in your scope"** message that **never reveals whether the rep exists**
+  (FR-014; the API returns the same `403` for both and the UI never reads the body); the
+  no-history rep shows the API's empty-state message and missing metrics render "—", never a
+  fabricated value (FR-018).
+- **Offline demo entrypoint** — `src/coach/api/demo.py` (`uvicorn coach.api.demo:app`) wires a
+  deterministic **wording-only** narrator + offline embeddings + auto-seeded synthetic data, so
+  the whole page renders end to end **with no live Bedrock call** (verified over HTTP). The
+  narrator phrases the already-computed structured reason — it never ranks, scores, or invents
+  numbers (Principle I/VI/VIII).
+
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
   (same seed → identical data), synthetic-only provenance, store round-trip, plus the
@@ -368,18 +400,26 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   per reps list) carrying only allow-listed safe fields; HR-sensitive rep fields and private HCP
   fields (names, metrics, raw PII) **never appear in the request-path logs**; and
   `build_audit_record` **refuses** a HR-sensitive field by construction (FR-016).
+- `tests/e2e/test_ui.py` (**T039**) — the page is **served as HTML** with the seeded-user
+  selector; it is **read-only** (the whole app surface is GET-only, and the page issues no
+  mutating fetch — it references only the GET endpoints); the rendered brief carries a
+  **non-placeholder reason on every one of the five sections** (FR-010, via the offline fake-LLM
+  path); and the **no-history rep** renders a clean empty-state message (FR-018).
 - Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, **all four Phase 4
-  brief-section components**, **the Phase 5 orchestrator + assembly**, **and the Step 5b
-  read-only API** all **COMPLIANT** (Principle V scope levels + scope-from-config, caller cannot
-  choose scope; Principle IV PRP scrubbing — reused helpers, not a bypass, unaffected by the
-  per-thread connection change; Principle I/VI/VIII deterministic + fixed DAG (no agentic loop) +
-  GET-only/no-mutation + LLM-out-of-deciding + config-controlled; Principle II
-  provenance/explainable + narrate-before-expose enforced through the API; FR-014 403
-  indistinguishable; FR-016 allow-list logging; Principle III synthetic-only; Principle VII
-  behind interfaces + per-request connection); no golden-rule violations. Recorded watch items
+  brief-section components**, **the Phase 5 orchestrator + assembly**, **the Step 5b read-only
+  API**, **and the Phase 6 web UI** all **COMPLIANT** (Principle V scope levels + scope-from-config,
+  caller cannot choose scope; Principle IV PRP scrubbing — reused helpers, not a bypass, unaffected
+  by the per-thread connection change; Principle I/VI/VIII deterministic + fixed DAG (no agentic
+  loop) + GET-only/no-mutation (API and UI) + LLM-out-of-deciding + no browser-side ranking +
+  config-controlled; Principle II provenance/explainable + reason shown under every UI
+  recommendation + narrate-before-expose enforced through the API; FR-014 403 indistinguishable
+  (API and UI); FR-016 allow-list logging; Principle III synthetic-only; Principle VII behind
+  interfaces + per-request connection); no golden-rule violations. Recorded watch items
   (not violations): narrow the global `KeyError`→403 to a dedicated `RepNotFoundError` so genuine
   bugs aren't masked; consider auditing denied/`403` access; keep `get_user.name` out of any
-  response/log; tune the ADR 0001 normalization caps with the business.
+  response/log; the UI's seed-picker role labels (RD/Head of Sales) are cosmetic demo text to
+  reconcile when the RD/RBE role names are confirmed; tune the ADR 0001 normalization caps with
+  the business.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -476,6 +516,11 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 
 ## 5. Open items — OPEN (pending)
 
+> **These are enhancements / next capabilities, NOT gaps in the MVP.** The morning coaching
+> brief is feature-complete and tested end to end (§6); everything below is follow-up work
+> (terminology confirmations, the CLOSE capability, business tuning, and deferred/optional
+> hardening) that does not block the MVP or its demo.
+
 - **Confirm "RBE" expansion (terminology only).** Working definition: a **regional
   business support role reporting to the Head of Sales**, with region scope + action
   rights. *Does NOT block Phase 2* — role names are config; the scope level is decided (§3).
@@ -541,9 +586,15 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** |
 | **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** |
 | **Phase 4** | The **five brief sections**: (1) coaching focus ✅ T026/T027; (2) ride-along prep ✅ (T010/T011 + T029/T030); (3) accounts + per-brand context ✅ T032/T033; (4) opener ✅ T035/T036 | **DONE** (all five sections) |
-| **Phase 5** | **Assembly + rubric + API.** **Step 5a** ✅ — the fixed-DAG **orchestrator + brief assembly + 5-section checklist rubric** (T015, T028, T031, T034, T038; ADR 0003). **Step 5b** ✅ — the **read-only FastAPI API** (T014, T016, T025, T037, T040): GET-only, identity→scope-from-config, per-request connection, FR-014 403, PRP-safe, privacy-safe logging | **DONE** (both steps; 120 tests pass) |
-| **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) — T039 | **NEXT** |
+| **Phase 5** | **Assembly + rubric + API.** **Step 5a** ✅ — the fixed-DAG **orchestrator + brief assembly + 5-section checklist rubric** (T015, T028, T031, T034, T038; ADR 0003). **Step 5b** ✅ — the **read-only FastAPI API** (T014, T016, T025, T037, T040): GET-only, identity→scope-from-config, per-request connection, FR-014 403, PRP-safe, privacy-safe logging | **DONE** (both steps) |
+| **Phase 6** | **UI** (T039) — minimal read-only web page rendering the 5 sections + each reason; seeded-user selector (API enforces scope); per-brand accounts + mismatch; clean 403/empty states; offline demo server | **DONE** |
 | **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
+
+> ✅ **MVP FEATURE-COMPLETE (Phases 1–6).** The morning coaching brief now runs end to end:
+> **synthetic data → RBAC/PRP data-access layer → deterministic ranking → the five brief
+> sections → the orchestrated, narrated, validated brief → the read-only API → the read-only
+> web UI.** `pytest` → **125 passed**. The remaining OPEN items (§5) are **enhancements / next
+> capabilities, not gaps in the MVP**.
 
 ---
 
@@ -555,22 +606,28 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
 4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + the five brief-section
    components (coaching-focus, notes-retriever, ride-along-prep, accounts-context, opener) +
-   the **Step 5a orchestrator + assembly** (`src/coach/orchestrator/`) + the **Step 5b read-only
-   API** (`src/coach/api/app.py`) and **audit/logging** (`src/coach/observability/audit.py`),
-   and run `uv run pytest -q` to confirm the suite is green (**120 passing**).
+   the **orchestrator + assembly** (`src/coach/orchestrator/`) + the **read-only API**
+   (`src/coach/api/app.py`), **audit/logging** (`src/coach/observability/audit.py`), the
+   **web UI** (`web/index.html`), and the **offline demo server** (`src/coach/api/demo.py`),
+   and run `uv run pytest -q` to confirm the suite is green (**125 passing**).
 
-**Immediate next action:** build **Phase 6 — the minimal web UI** (T039): a single read-only web
-page that renders the five brief sections **and each recommendation's `reason` block** (signals,
-weights, data points), presented as **suggestions the DM decides on** — no action/mutation
-controls. It calls the existing read-only API (`GET /api/whoami`, `GET /api/reps`,
-`GET /api/brief/{rep_id}`); the orchestrator + API are already built and tested, so Phase 6 is a
-presentation layer over them. Keep PRP/RBAC/narrate-before-expose intact (the API already
-guarantees these — the UI must not add its own data path).
+**Run it locally:**
+- **Offline demo (no AWS, recommended for a walkthrough):** `uv run uvicorn coach.api.demo:app
+  --reload`, then open `http://127.0.0.1:8000/`. The demo server auto-seeds synthetic data and
+  uses an offline narrator + fake embeddings — no live Bedrock call. Switch the seeded user
+  (dm_d1 / dm_d2 / region_r1 / hos_1) to see RBAC scope change; open a rep for the full brief.
+- **Production wiring:** `uv run uvicorn coach.api.app:app --reload` with `BEDROCK_MODEL_ID` /
+  `AWS_REGION` / `BEDROCK_EMBED_MODEL_ID` set and a seeded DB
+  (`uv run python -m coach.synthetic.generate`).
 
-**Note — refresh the architecture/flow diagrams.** The README / `docs/technical-architecture.md`
-diagrams currently mark the orchestrator and API as *planned*; both are now built (the fixed
-LangGraph DAG + the read-only FastAPI surface), so the diagrams can be updated to show them as
-implemented when convenient (doc-only).
+**Immediate next action (the MVP build is done):**
+1. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
+   and the visible reasons, and use it to gather feedback (and to drive the workshop + the
+   config tuning in §5).
+2. **Refresh the architecture / flow diagrams** — the README / `docs/technical-architecture.md`
+   diagrams still mark the **orchestrator, API, and UI as planned**; all three are now built
+   (the fixed LangGraph DAG, the read-only FastAPI surface, and the read-only web page), so the
+   diagrams should be updated to show them as implemented (doc-only).
 
 **Reminders to carry forward:**
 - **Narrate before expose — done and enforced.** `assert_narrated` raises on any surviving
