@@ -24,6 +24,7 @@ from coach.schemas import (
     Opener,
     RepRanking,
     RideAlongPrep,
+    Theme,
 )
 
 _INSTRUCTION = (
@@ -232,3 +233,38 @@ def narrate_opener(opener: Opener, llm: LLM) -> Opener:
     summary = llm.narrate(facts, _OPENER_SUMMARY_INSTRUCTION).strip() or opener.reason.summary
     new_reason = opener.reason.model_copy(update={"summary": summary})
     return opener.model_copy(update={"text": text, "reason": new_reason})
+
+
+_THEME_INSTRUCTION = (
+    "Write a short, plain-language summary of this coaching THEME across the team, for a "
+    "leadership reader. Use ONLY the counts and shares provided — do not invent numbers. "
+    "Describe the pattern (how widespread it is); do NOT name, single out, or describe any "
+    "individual rep. One or two sentences."
+)
+
+
+def _theme_input(theme: Theme) -> dict:
+    """Read-only facts handed to the LLM — COUNTS / SHARES ONLY, never a rep identity. The LLM
+    may phrase the pattern; it may not alter the theme, counts, or shares."""
+    return {
+        "theme": theme.theme,
+        "signal": theme.signal.value if theme.signal else None,
+        "rep_count": theme.rep_count,
+        "rep_share": theme.rep_share,
+        "supporting_counts": [d.model_dump() for d in theme.reason.data_points],
+    }
+
+
+def narrate_theme(theme: Theme, llm: LLM) -> Theme:
+    """Return a copy of `theme` with ONLY `reason.summary` replaced by LLM prose. The theme
+    label, signal, counts, shares, and supporting data points are preserved by construction
+    (Principle I/VI; the anti-LLM guard verifies the LLM cannot change the numbers)."""
+    summary = llm.narrate(_theme_input(theme), _THEME_INSTRUCTION).strip()
+    if not summary:
+        summary = theme.reason.summary  # schema requires a non-empty summary; keep prior
+    new_reason = theme.reason.model_copy(update={"summary": summary})
+    return theme.model_copy(update={"reason": new_reason})
+
+
+def narrate_themes(themes: list[Theme], llm: LLM) -> list[Theme]:
+    return [narrate_theme(t, llm) for t in themes]

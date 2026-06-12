@@ -333,6 +333,36 @@ class CoachingBrief(BaseModel):
     synthetic: bool = True  # data provenance label (Principle III)
 
 
+# ------------------------------------ theme aggregation (Phase 7 / capability #6)
+class Theme(BaseModel):
+    """One aggregated coaching theme across a set of reps — PATTERNS / COUNTS ONLY.
+
+    STRUCTURAL privacy invariant (FR-016): this object has **no rep-identity field** (no
+    `rep_id` / `name`), so an aggregated theme cannot expose a named individual or
+    individually identifiable rep detail — it carries only the theme, its counts, and shares.
+    The `reason` holds supporting COUNTS (never a list of named reps).
+    """
+
+    theme: (
+        str  # the focus-area / theme label (from the config catalog — same as the per-rep section)
+    )
+    signal: SignalName | None = None  # the signal it maps to (None = the no-gap default theme)
+    rep_count: int  # how many in-scope reps have this theme
+    rep_share: float  # rep_count / total in-scope reps (0..1)
+    reason: Reason  # supporting counts (no rep identities); summary narrated by the LLM
+
+
+class ThemeAggregate(BaseModel):
+    """An aggregate-only, RBAC-scoped (region / all) leadership view of coaching themes across
+    reps (Phase 7 / capability #6). Pure data, suggestion-only. Shows patterns and counts,
+    **never named individuals** (FR-016)."""
+
+    generated_for: GeneratedFor
+    rep_count: int  # total in-scope reps (the denominator for the shares)
+    themes: list[Theme]  # ranked, most common first
+    synthetic: bool = True
+
+
 # ------------------------------------------------------- synthetic dataset
 class GenerationMeta(BaseModel):
     seed: int
