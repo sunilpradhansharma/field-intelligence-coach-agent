@@ -153,6 +153,11 @@ class Settings:
         default_factory=lambda: int(os.getenv("COACH_OPENER_MAX_POINTS", "3"))
     )
 
+    # Brief assembly (T015): how many ranked reps to show in section 1 (the "top 3–5" list).
+    ranked_reps_max: int = field(
+        default_factory=lambda: int(os.getenv("COACH_RANKED_REPS_MAX", "5"))
+    )
+
 
 def get_settings() -> Settings:
     """Return settings resolved from the current environment."""

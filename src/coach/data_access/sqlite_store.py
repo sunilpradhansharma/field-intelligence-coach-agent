@@ -77,7 +77,11 @@ class SqliteStore(DataAccess):
         self.db_path = db_path
         if db_path != ":memory:":
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
+        # `check_same_thread=False`: the orchestrator (and a future web server) runs the
+        # independent section reads on worker threads. Python's sqlite3 is built in serialized
+        # mode, so one connection is safe for concurrent READS; the only write
+        # (`write_dataset`) happens once on the main thread before any graph runs.
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
 
     # ----------------------------------------------------------------- lifecycle

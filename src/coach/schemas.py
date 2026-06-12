@@ -308,6 +308,31 @@ class EmptyState(BaseModel):
     reason: Reason
 
 
+# -------------------------------------------- assembled brief (FR-001 / section roll-up)
+class GeneratedFor(BaseModel):
+    """Who the brief was generated for + their territory scope (audit / display)."""
+
+    user_id: str
+    role: Role
+    scope_level: ScopeLevel
+    scope: str  # the territory the caller is scoped to (district_id / region_id / "all")
+
+
+class CoachingBrief(BaseModel):
+    """The assembled morning brief: the five sections for a selected rep (FR-001). Pure data —
+    suggestion only, no action path (FR-011)."""
+
+    brief_id: str
+    generated_for: GeneratedFor
+    ranked_reps: list[RepRanking]  # section 1 (top N)
+    selected_rep_id: str  # the rep the rest of the brief details
+    coaching_focus: list[CoachingFocus]  # section 2
+    ride_along_prep: RideAlongPrep | EmptyState  # section 3
+    accounts: list[AccountFocus]  # section 4
+    opener: Opener  # section 5
+    synthetic: bool = True  # data provenance label (Principle III)
+
+
 # ------------------------------------------------------- synthetic dataset
 class GenerationMeta(BaseModel):
     seed: int

@@ -72,7 +72,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 ### Orchestrator + API skeleton
 
-- [ ] T015 Implement LangGraph orchestrator skeleton (explicit DAG, no loops) + brief assembly stub in `src/coach/orchestrator/graph.py` and `src/coach/orchestrator/brief.py` (rejects any recommendation lacking a non-empty `reason`) — depends on T006
+- [X] T015 Implement the LangGraph orchestrator (**fixed DAG, no loops**) + brief assembly in `src/coach/orchestrator/brief_graph.py` and `src/coach/orchestrator/assembly.py`. Node order: rank → select_rep → {coaching_focus, ride_along_prep, accounts_context} (parallel) → opener (after focus + accounts) → assemble; the `AccessContext` threads through every node (RBAC + PRP hold; scope never widened). Each node runs the section's deterministic build AND its `narrate_*`. Assembly builds `CoachingBrief` and runs the **narrate-before-expose guard** (`assert_narrated` RAISES on any `PENDING_*` placeholder). New schemas `CoachingBrief` + `GeneratedFor`; config `ranked_reps_max`. See **docs/adr/0003-orchestration-and-narrate-before-expose.md**. (Store now opens with `check_same_thread=False` so the parallel section reads work.) — depends on T006, T023–T036
 - [ ] T016 Implement FastAPI app skeleton + simulated identity → `AccessContext` (`X-User-Id`) + `GET /api/whoami` in `src/coach/api/app.py` — depends on T008
 
 ### Foundational tests (RBAC, data, schema)
@@ -122,7 +122,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 ### Implementation for User Story 2
 
 - [X] T027 [US2] Implement `coaching_focus` component in `src/coach/components/coaching_focus.py` — deterministic selection of 1–3 focus areas from a config catalog + config trigger thresholds (reads signals via the shared `src/coach/components/signals.py`, through the data-access layer); each focus carries a data-tied `Reason`. LLM only phrases the reason text (`narrate_focus` in `src/coach/llm/narrate.py`, model_copy → summary only). Depends on T005, T006, T023
-- [ ] T028 [US2] Wire the `coaching_focus` node into the graph and into the brief (section 2) in `src/coach/orchestrator/graph.py`. Depends on T015, T027
+- [X] T028 [US2] Wire the `coaching_focus` node into the graph and into the brief (section 2) — done in `src/coach/orchestrator/brief_graph.py` (`_coaching_focus_node`). Depends on T015, T027
 
 **Checkpoint**: US1 + US2 both independently functional.
 
@@ -141,7 +141,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 ### Implementation for User Story 3
 
 - [X] T030 [US3] Implement `ride_along_prep` component in `src/coach/components/ride_along_prep.py` — deterministic assembly: prior-note free text via the **`Retriever`** (RBAC + PRP guarded) and `agreed_actions`/`observe_next` via the **structured store**, gated to the same (PRP-scrubbed) session set; most-recent-N from config; per-item provenance; returns `EmptyState` when no surfaceable history. New schemas `RideAlongPrep`/`EmptyState`/`PriorNote`/`PriorActionItem`/`NoteSource`. LLM (`narrate_ride_along`) writes only `reason.summary` + `opening`. Depends on T011, T006
-- [ ] T031 [US3] Wire the `ride_along_prep` node into the graph and into the brief (section 3). Depends on T015, T030
+- [X] T031 [US3] Wire the `ride_along_prep` node into the graph and into the brief (section 3) — done in `src/coach/orchestrator/brief_graph.py` (`_ride_along_node`). Depends on T015, T030
 
 **Checkpoint**: US1–US3 independently functional.
 
@@ -160,7 +160,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 ### Implementation for User Story 4
 
 - [X] T033 [US4] Implement `accounts_context` component in `src/coach/components/accounts_context.py` — deterministic: selects the **focused** key (account, brand) rows (top `accounts_max` from config by a priority of opportunity/risk/share-decline/mismatch), attaches per-(account, brand) business context, and flags **behaviour-vs-opportunity mismatch** (high opportunity + low calls, `mismatch_call_threshold` from config), each with a data-tied `Reason`. **Per-brand (I1/FR-007)**: reads per-(account, brand) rows from `AccountBrandMetrics`/`CallActivity` (RBAC + PRP scrubbed) and produces **one `AccountFocus` per (account, brand)**, labeled by the **Brand enum display name** (no per-account collapsing). Updated schemas: `AccountFocus` now carries `brand` + `AccountBrandContext` (incl. `calls_trend`). LLM (`narrate_account_focus`) writes only `reason.summary`. Edge cases (FR-018): no accounts → empty; missing call activity → "not recorded". Depends on T005, T006, T009
-- [ ] T034 [US4] Wire the `accounts_context` node into the graph and into the brief (section 4). Depends on T015, T033
+- [X] T034 [US4] Wire the `accounts_context` node into the graph and into the brief (section 4) — done in `src/coach/orchestrator/brief_graph.py` (`_accounts_node`). Depends on T015, T033
 
 **Checkpoint**: US1–US4 independently functional.
 
@@ -189,7 +189,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 **Purpose**: Whole-brief quality, UI, audit, and validation.
 
-- [ ] T038 Implement the **5-section checklist rubric** e2e test in `tests/e2e/test_brief_rubric.py` — a brief PASSES only if all 5 sections are present AND every recommendation has a visible reason (encodes the fixed rubric; SC-002/004/005/006). **Consistency check (SC-004)**: run the brief twice for the same seeded DM and assert both produce an identical structured brief skeleton (same sections, same shape)
+- [X] T038 Implement the **5-section checklist rubric** e2e test in `tests/e2e/test_brief_rubric.py` — a brief PASSES only if all 5 sections are present AND every recommendation has a visible reason (encodes the fixed rubric via `assembly.rubric_violations`; SC-002). **Consistency check (SC-004)**: run the brief twice for the same seeded DM → identical brief (skeleton + facts + deterministic wording). Plus the **narrate-before-expose guard** (assembly RAISES on a placeholder), **RBAC** (out-of-scope rep → `ScopeError`) + **PRP** (PRP accounts never appear in the brief), and the **FR-018** no-history rep (valid, rubric-passing brief with an `EmptyState` ride-along)
 - [ ] T039 [P] Implement the minimal web page in `web/index.html` — renders the 5 sections and each `reason` block (suggestions only; DM decides)
 - [ ] T040 [P] Audit assertions in `tests/e2e/test_audit.py` — one record per brief generation and per LLM call; no out-of-scope data, no raw PII. **Privacy-in-logging (FR-016)**: assert HR-sensitive rep fields and private HCP fields are never logged or serialized outside their allowed scope (use the field-level classification from T014)
 - [ ] T041 [P] Synthetic-only guard test in `tests/e2e/test_synthetic_only.py` — every data response carries `synthetic=true`; no real connector is configured (SC-007)
