@@ -25,10 +25,10 @@ synthetic.
 
 ## 2. Current status — BUILT (in the repo now)
 
-**Phase 1 Foundation (incl. the PRP + per-brand amendment), Phase 2 (RBAC + PRP
-enforcement), Phase 3 (deterministic ranking), and Phase 4 (all five brief sections —
-ranking, coaching focus, ride-along prep, accounts/business context, opener) are COMPLETE
-and tested.** `pytest` → **89 passed**. Next: Phase 5 (assembly + 5-section rubric + API).
+**Phases 1–4 are COMPLETE and tested (the data-access layer, RBAC + PRP, the deterministic
+ranking, and all five brief sections). Phase 5 is IN PROGRESS — Step 5a (the brief
+orchestrator + assembly + 5-section rubric) is DONE; Step 5b (the read-only API) is
+planned.** `pytest` → **99 passed**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -241,6 +241,35 @@ FR-009/FR-010/FR-011/FR-018):
 Bases / OpenSearch** behind the same `EmbeddingProvider` / `VectorStore` / `Retriever`
 interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (ADR 0002).
 
+### Phase 5 (IN PROGRESS) — assembly + rubric + API
+**Step 5a — orchestrator + brief assembly + rubric — tasks T015, T028, T031, T034, T038 — DONE**
+(`src/coach/orchestrator/brief_graph.py` + `assembly.py`, FR-001/FR-010/FR-011; ADR 0003):
+- **Fixed, deterministic LangGraph DAG — not an agentic loop**: the graph is built **once**
+  with **static edges** (rank → select_rep → **{coaching_focus, ride_along_prep, accounts} in
+  parallel** → opener (joins focus + accounts) → assemble). No cycles, no conditional routing,
+  no node re-plans; same seed + deterministic LLM → the **same brief**.
+- **AccessContext threaded through every node**: each node calls its section component with the
+  caller's `AccessContext` and never widens scope — RBAC + PRP hold for the whole brief (an
+  out-of-scope `rep_id` → `ScopeError`; PRP accounts never appear in the assembled brief). The
+  orchestrator never reads the store/retriever directly.
+- **LLM still only narrates**: each node runs the section's deterministic build **then** its
+  `narrate_*` (wording only, via `model_copy`). The brief default-selects the **top-ranked**
+  rep, or an explicit in-scope `rep_id`.
+- **Narrate-before-expose enforced in assembly**: `assemble` builds the `CoachingBrief`, then
+  `assert_narrated` **RAISES** (`BriefNotNarratedError`) if any section still holds a
+  `PENDING_SUMMARY` / `PENDING_TEXT` / `PENDING_OPENING` placeholder — an un-narrated brief can
+  never be returned.
+- **Suggestion-only**: the assembled `CoachingBrief` is **pure data** — no action/mutation/
+  execute path (FR-011); assembly only builds + validates the object.
+- New schemas `CoachingBrief` + `GeneratedFor`; config `ranked_reps_max`. The store now opens
+  with `check_same_thread=False` (safe — the single write happens before any graph runs; the
+  parallel section nodes are read-only; Python sqlite3 is serialized-mode).
+
+**Step 5b — read-only API (PLANNED)** — the FastAPI endpoints (`GET /api/whoami`, `GET /api/reps`,
+`GET /api/brief/{rep_id}`), identity → `AccessContext`, `403` on out-of-scope, audit records,
+and the deferred read-only route guards — tasks **T016, T025, T037** (intentionally still
+unchecked).
+
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
   (same seed → identical data), synthetic-only provenance, store round-trip, plus the
@@ -289,13 +318,18 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   reason (FR-010); suggestion-only data, no action (FR-011); the **anti-LLM guard** (only
   `text` + `reason.summary` change; no points added); FR-018 no-priority rep → positive
   default opener, not fabricated.
-- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, and **all four Phase 4
-  brief-section components** (**coaching focus**, the **notes retriever seam** +
-  **ride-along-prep component**, the **accounts/business-context component**, and the
-  **opener**) all **COMPLIANT** (Principle V scope levels; Principle IV PRP scrubbing — reused
-  helpers, not a bypass; Principles I/VI deterministic + LLM-out-of-deciding + config-controlled
-  + LLM adds no facts; Principle II provenance/explainable; Principle III synthetic-only;
-  Principle VII behind interfaces); no golden-rule violations.
+- `tests/e2e/test_brief_rubric.py` (**T038**) — end-to-end brief assembly: the **5-section
+  checklist rubric** (SC-002, all five sections present + every recommendation has a visible
+  reason); the **consistency check** (F4/SC-004 — two runs → identical `model_dump`); the
+  **narrate-before-expose guard** raises (direct mutation + an empty-LLM end-to-end); **RBAC**
+  (out-of-scope rep → `ScopeError`) + **PRP** (PRP accounts never in the brief); **FR-018** no-
+  history rep → valid, rubric-passing brief; and suggestion-only (pure data, no action path).
+- Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, **all four Phase 4
+  brief-section components**, **and the Phase 5 orchestrator + assembly** all **COMPLIANT**
+  (Principle V scope levels; Principle IV PRP scrubbing — reused helpers, not a bypass;
+  Principles I/VI/VIII deterministic + fixed DAG (no agentic loop) + LLM-out-of-deciding +
+  config-controlled; Principle II provenance/explainable + narrate-before-expose enforced;
+  Principle III synthetic-only; Principle VII behind interfaces); no golden-rule violations.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -339,6 +373,11 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   is part of the single door, not a separate trust boundary: it re-applies the same RBAC scope
   and PRP scrubbing on every query, reusing the existing helpers. See
   [`docs/adr/0002-notes-retriever-rbac-prp.md`](adr/0002-notes-retriever-rbac-prp.md).
+- **Fixed-graph orchestration; narrate before expose (ADR 0003)** — the brief is composed by a
+  fixed LangGraph DAG (deterministic order, no agentic loop; `AccessContext` threaded through
+  every node) and an assembly guard that **rejects any brief containing an un-narrated
+  placeholder**. See
+  [`docs/adr/0003-orchestration-and-narrate-before-expose.md`](adr/0003-orchestration-and-narrate-before-expose.md).
 - **Brand portfolio modeled** — LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid, and
   **LILETTA** (brand spelling **finalized**; `Brand` enum member `liletta` = "LILETTA").
 - **Terminology** — **AEBAT** is a tool/website that shows strategic spend and
@@ -401,12 +440,23 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 - **F6 / F8 superseded** — because region-level roles now have full **write/action**
   access, the old read-only API guard tests are recorded as **SUPERSEDED** in `tasks.md`
   (replace with per-route / scope-level authorization tests when write routes are designed).
-- **Phase 5 requirement — narrate before exposing a ranking.** The deterministic scorer
-  leaves `reason.summary` as the `PENDING_SUMMARY` placeholder until LLM narration (T024)
-  runs. The **API / orchestrator MUST always run narration before any ranking reaches a
-  user** — no un-narrated ranking (placeholder summary) should ever be surfaced. Add a test
-  when the API lands asserting no response contains `PENDING_SUMMARY`. (From the Phase 3
-  guardian review; not a Phase 3 bug — the scorer correctly leaves prose to T024.)
+- **Narrate before exposing a ranking — now ENFORCED in assembly (Step 5a).** The
+  deterministic builders leave `reason.summary` as a `PENDING_SUMMARY` placeholder until the
+  `narrate_*` step runs. The brief orchestrator narrates every section inside the graph, and
+  `assembly.assert_narrated` **RAISES** (`BriefNotNarratedError`) if any placeholder survives —
+  so an un-narrated brief can never be assembled (tested in T038, both via direct mutation and
+  an empty-LLM run). **Still open for Step 5b:** the **API must also never surface a
+  placeholder** — add a route-level test asserting no response body contains `PENDING_SUMMARY`
+  / `PENDING_TEXT` / `PENDING_OPENING` once the endpoints land. (Originally from the Phase 3
+  guardian review; the in-brief half is now closed by ADR 0003.)
+- **Step 5b — use a per-request DB connection (or a small pool) at the data-access
+  boundary.** The store currently holds **one process-wide SQLite connection** opened with
+  `check_same_thread=False` — safe **today** (the single write happens before any graph runs;
+  the parallel section nodes are read-only; sqlite3 serialized mode makes concurrent reads
+  safe). Under **concurrent web requests** that shared connection becomes a contention/
+  correctness risk, so Step 5b should open a **connection per request** (or a small pool) behind
+  the same `DataAccess` interface. This also **aligns with the production mapping** (Aurora +
+  a connection pool). (From the Step 5a guardian review — watch item, LOW.)
 - **Optional RBAC hardening (deferred, non-blocking)** — from the Phase 2 guardian review:
   (#3) `rbac.scoped_rep_ids` / `rep_in_scope` "fail closed to empty/`False`" on an unmapped
   scope level instead of raising loudly — currently **unreachable** (every `Role` is mapped;
@@ -436,8 +486,8 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 1** | Foundation: interface, schemas, store, config, seeded generator + the PRP/per-brand **amendment** | **DONE** |
 | **Phase 2** | **RBAC** (T008, scope levels: self/district/region/all) + **PRP scrubbing enforcement** (T008A) at the data-access layer; tests T017/T017A | **DONE** |
 | **Phase 3** | **Deterministic ranking** (T023, incl. signal normalization so config weights control influence) + LLM reason narration (T024); tests T020/T021/T022/T022a | **DONE** |
-| **Phase 4** | The **five brief sections**: (1) coaching focus ✅ T026/T027; (2) ride-along prep ✅ (T010/T011 + T029/T030); (3) accounts + per-brand context ✅ T032/T033; (4) opener ✅ T035/T036 | **DONE** (all sections; 89 tests pass) |
-| **Phase 5** | **Assembly + rubric + API** (orchestrator/brief, 5-section checklist rubric test, FastAPI endpoints) | **NEXT** |
+| **Phase 4** | The **five brief sections**: (1) coaching focus ✅ T026/T027; (2) ride-along prep ✅ (T010/T011 + T029/T030); (3) accounts + per-brand context ✅ T032/T033; (4) opener ✅ T035/T036 | **DONE** (all five sections) |
+| **Phase 5** | **Assembly + rubric + API.** **Step 5a** ✅ — the fixed-DAG **orchestrator + brief assembly + 5-section checklist rubric** (T015, T028, T031, T034, T038; ADR 0003). **Step 5b** ⏳ — the **read-only FastAPI API** (T016, T025, T037) | **IN PROGRESS** (Step 5a done; 99 tests pass) |
 | **Phase 6** | **UI** (minimal web page rendering the 5 sections + each reason) | Planned |
 | **(New)** | **CLOSE capture** capability — observations + focus/development at session end | Planned additional capability (needs its own spec) |
 
@@ -450,19 +500,22 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
    `data-model.md`, `tasks.md` — for the detailed requirements and task IDs.
 3. Then read **`CLAUDE.md`** for the golden rules and stack/commands.
 4. Skim **`src/coach/`** for the built foundation + RBAC/PRP + ranking + the five brief-section
-   components (coaching-focus, notes-retriever, ride-along-prep, accounts-context, opener),
-   and run `uv run pytest -q` to confirm the suite is green (**89 passing**).
+   components (coaching-focus, notes-retriever, ride-along-prep, accounts-context, opener) +
+   the **Step 5a orchestrator + assembly** (`src/coach/orchestrator/`),
+   and run `uv run pytest -q` to confirm the suite is green (**99 passing**).
 
-**Immediate next action:** build **Phase 5 — assembly + rubric + API** (orchestrator/brief
-assembly that wires the five built sections, the **5-section checklist rubric** e2e test, and
-the FastAPI endpoints). All section components are done; Phase 5 composes them into the full
-brief and exposes it.
+**Immediate next action:** build **Phase 5 — Step 5b — the read-only FastAPI API** (T016, T025,
+T037) on top of the Step 5a orchestrator: identity → `AccessContext`, `GET /api/whoami` /
+`GET /api/reps` / `GET /api/brief/{rep_id}` calling `build_brief`, `403` on out-of-scope, audit
+records, and the deferred read-only route guards. Step 5a (the orchestrator, brief assembly, and
+the 5-section rubric) is **done**; Step 5b only needs to expose it over HTTP. Open the store with
+a **per-request connection (or a small pool)** at the data-access boundary — see §5.
 
-**Two reminders to carry into Phase 5:**
-- **Narrate before expose.** The orchestrator/API MUST run LLM narration on every section
-  output **before** anything reaches a user — **no `PENDING_SUMMARY` (or `PENDING_TEXT` /
-  `PENDING_OPENING`) placeholder should ever be surfaced**. Add a test asserting no response
-  contains a pending placeholder once the API lands.
+**Two reminders to carry into Step 5b:**
+- **Narrate before expose.** Now **enforced inside assembly** — `assert_narrated` raises on any
+  surviving `PENDING_SUMMARY` / `PENDING_TEXT` / `PENDING_OPENING` placeholder (ADR 0003, T038).
+  The **API must hold the same line**: add a route-level test asserting no response body contains
+  a pending placeholder once the endpoints land.
 - **Tune the config-visible values with the business.** The **ranking normalization caps**
   (ADR 0001), the **coaching-focus thresholds**, and the **account selection / mismatch rule**
   are all config-visible product judgments — review/tune them once real output is visible.
