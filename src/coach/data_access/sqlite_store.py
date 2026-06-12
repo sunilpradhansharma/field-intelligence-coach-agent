@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 from coach.data_access import rbac
@@ -30,6 +31,8 @@ from coach.schemas import (
     OpportunityLevel,
     Performance,
     Rep,
+    Role,
+    User,
 )
 
 _SCHEMA = """
@@ -75,14 +78,25 @@ class SqliteStore(DataAccess):
 
     def __init__(self, db_path: str = ":memory:") -> None:
         self.db_path = db_path
-        if db_path != ":memory:":
+        self._lock = threading.Lock()
+        self._conns: list[sqlite3.Connection] = []  # every open connection (for close())
+        self._local = threading.local()  # one connection PER THREAD (a small pool)
+        if db_path == ":memory:":
+            # A uniquely-named, shared-cache in-memory DB: each thread opens its OWN connection
+            # that still sees the same data (a bare ":memory:" DB is private to one connection).
+            self._target = f"file:coach-mem-{id(self):x}?mode=memory&cache=shared"
+            self._use_uri = True
+        else:
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        # `check_same_thread=False`: the orchestrator (and a future web server) runs the
-        # independent section reads on worker threads. Python's sqlite3 is built in serialized
-        # mode, so one connection is safe for concurrent READS; the only write
-        # (`write_dataset`) happens once on the main thread before any graph runs.
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+            self._target = db_path
+            self._use_uri = False
+        # The orchestrator runs the independent section reads on PARALLEL worker threads. A
+        # single shared sqlite connection is not safe for that; instead each thread gets its
+        # OWN connection (the `_conn` property below), so reads never race. This is the small
+        # connection pool the data-access boundary needs — it maps to a connection pool /
+        # Aurora in production. The keeper conn (the owning thread's) also keeps a shared-cache
+        # in-memory DB alive for the store's lifetime.
+        self._keeper = self._new_connection()
 
     # ----------------------------------------------------------------- lifecycle
     def __enter__(self) -> SqliteStore:
@@ -91,8 +105,32 @@ class SqliteStore(DataAccess):
     def __exit__(self, *exc: object) -> None:
         self.close()
 
+    def _new_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._target, uri=self._use_uri)
+        conn.row_factory = sqlite3.Row
+        with self._lock:
+            self._conns.append(conn)
+        self._local.conn = conn
+        return conn
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        """The CURRENT thread's connection (opened lazily). Per-thread connections make the
+        orchestrator's parallel section reads safe without a process-wide shared connection."""
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = self._new_connection()
+        return conn
+
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            conns = list(self._conns)
+            self._conns.clear()
+        for conn in conns:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
 
     # ------------------------------------------------------------------- writes
     def init_schema(self) -> None:
@@ -200,6 +238,25 @@ class SqliteStore(DataAccess):
             ],
         )
         self._conn.commit()
+
+    # ---------------------------------------------------------------- identity
+    def get_user(self, user_id: str) -> User | None:
+        """Resolve a login identity to its `User` (role + territory).
+
+        This is the PRE-AUTH identity lookup the API uses to BUILD an `AccessContext`; it is
+        not territory data, so it is intentionally not RBAC-scoped. It exists here so the API
+        never touches the raw connection (all reads go through the data-access layer). Returns
+        `None` for an unknown id (the API maps that to `401`)."""
+        row = self._conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        if row is None:
+            return None
+        return User(
+            user_id=row["user_id"],
+            name=row["name"],
+            role=Role(row["role"]),
+            region_id=row["region_id"],
+            district_id=row["district_id"],
+        )
 
     # -------------------------------------------------------------------- reads
     # Every read enforces RBAC (scope level) and PRP scrubbing via `rbac` (T008/T008A).

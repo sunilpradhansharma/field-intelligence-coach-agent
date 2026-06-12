@@ -68,12 +68,12 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 - [X] T011 Implement the `Retriever` seam in `src/coach/data_access/notes_retriever.py` (+ `vector_store.py`: a `VectorStore` interface with an in-memory cosine store for the MVP → Chroma / Bedrock Knowledge Bases / OpenSearch in prod). Indexes coaching notes and enforces the **same RBAC scope + PRP scrubbing at query time** (reuses `rbac.require_rep_in_scope` / `scoped_rep_ids` / `prp_account_ids`); single guarded entry point `search_notes`. See **docs/adr/0002-notes-retriever-rbac-prp.md**. NOTE: this is the seam only — the ride-along-prep component (T029–T031) that consumes it is separate. Depends on T005, T008/T008A, T010, T009
 - [ ] T012 [P] Implement the Bedrock Claude `LLM` wrapper in `src/coach/llm/client.py` (model id from config; only `narrate(reason)` / `draft_opener()` — MUST NOT compute or alter rankings)
 - [ ] T013 [P] Implement the PII `Guardrail` seam in `src/coach/guardrails/pii.py` (pass-through hook for MVP → Bedrock Guardrails in prod)
-- [ ] T014 [P] Implement audit/observability in `src/coach/observability/audit.py` (structured per-brief and per-LLM-call records; no out-of-scope data, no raw PII). **Record field-level data classification** (rep fields = HR-sensitive; HCP fields = private/IQVIA-PDRP) so the logger knows which fields must never be emitted (FR-016)
+- [X] T014 [P] Implement audit/observability in `src/coach/observability/audit.py` (structured per-brief and per-LLM-call records; no out-of-scope data, no raw PII). **Record field-level data classification** (rep fields = HR-sensitive; HCP fields = private/IQVIA-PDRP) so the logger knows which fields must never be emitted (FR-016) — `build_audit_record` enforces an allow-list of safe identifiers/metadata and REFUSES any HR-sensitive/private field by construction
 
 ### Orchestrator + API skeleton
 
 - [X] T015 Implement the LangGraph orchestrator (**fixed DAG, no loops**) + brief assembly in `src/coach/orchestrator/brief_graph.py` and `src/coach/orchestrator/assembly.py`. Node order: rank → select_rep → {coaching_focus, ride_along_prep, accounts_context} (parallel) → opener (after focus + accounts) → assemble; the `AccessContext` threads through every node (RBAC + PRP hold; scope never widened). Each node runs the section's deterministic build AND its `narrate_*`. Assembly builds `CoachingBrief` and runs the **narrate-before-expose guard** (`assert_narrated` RAISES on any `PENDING_*` placeholder). New schemas `CoachingBrief` + `GeneratedFor`; config `ranked_reps_max`. See **docs/adr/0003-orchestration-and-narrate-before-expose.md**. (Store now opens with `check_same_thread=False` so the parallel section reads work.) — depends on T006, T023–T036
-- [ ] T016 Implement FastAPI app skeleton + simulated identity → `AccessContext` (`X-User-Id`) + `GET /api/whoami` in `src/coach/api/app.py` — depends on T008
+- [X] T016 Implement FastAPI app skeleton + simulated identity → `AccessContext` (`X-User-Id`) + `GET /api/whoami` in `src/coach/api/app.py` — depends on T008. Read-only surface (GET only); identity resolves via the data-access layer (`SqliteStore.get_user`) → role → scope level from config (caller cannot choose scope); a fresh store connection is opened/closed PER REQUEST (a small per-thread pool in `SqliteStore`, maps to a connection pool / Aurora); clean error mapping (401 unknown identity, 403 out-of-scope/not-found indistinguishable, 500 without stack traces); LLM/embeddings injected via `AppDeps` (Bedrock lazy; tests use fakes)
 
 ### Foundational tests (RBAC, data, schema)
 
@@ -103,7 +103,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 - [X] T023 [US1] Implement the **deterministic prioritization scoring function** in `src/coach/components/ranking.py` (reads per-(account, brand) metrics through the new RBAC+PRP-scrubbed `get_account_brand_metrics` data-access read) — pure code, fixed visible weights from config over the 4 signals; returns `list[RepRanking]` + `Reason` (signals, weights, contributions, data points). **Per-brand metrics (I1)**: the "declining share" and "low call activity in key accounts" signals read per-(account, brand) rows from `AccountBrandMetrics`/`CallActivity`, then **roll up to a single per-rep value by aggregating across all of the rep's (account, brand) rows** (simple, explicit rule — e.g., volume-weighted share decline and total calls vs. opportunity across the rep's brand rows) before applying weights; the rollup MUST be deterministic so the T021 golden fixture is stable. **The LLM does NOT decide ranking.** Depends on T005, T006, T009
 - [X] T024 [US1] Implement LLM **reason narration** (separate step) in `src/coach/llm/narrate.py` — turns the structured `Reason` into clear language via the `LLM` seam in `src/coach/llm/client.py` (minimal `BedrockLLM`, model id from config; the T012 wrapper can extend it), writing ONLY `reason.summary` and never touching ranks/scores/signals/contributors (FR-002, FR-012; enforced by `model_copy` and verified by the anti-LLM-ranking guard). Depends on T023
-- [ ] T025 [US1] Wire the `prioritize` node into the graph and implement `GET /api/reps` in `src/coach/api/app.py` (audit record emitted). Depends on T015, T016, T023, T024
+- [X] T025 [US1] Wire the `prioritize` node into the graph and implement `GET /api/reps` in `src/coach/api/app.py` (audit record emitted). Depends on T015, T016, T023, T024. RBAC-scoped (data-access layer) + `?limit` honored; deterministic ranking in code, LLM narrates only; narrate-before-expose re-checked at the boundary (no `PENDING_*` placeholder may reach a client); one privacy-safe audit record per call
 
 **Checkpoint**: US1 fully functional and independently testable — this is the MVP slice.
 
@@ -179,7 +179,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 ### Implementation for User Story 5
 
 - [X] T036 [US5] Implement `opener` component in `src/coach/components/opener.py` — **deterministic** talking-point selection (pure function of the already-built section outputs — priority reason, coaching focus, accounts/mismatch; introduces no new data, fetches nothing). Selects an ordered, config-capped (`opener_max_points`) set of `TalkingPoint`s (top real coaching focus + key/mismatched account + top priority signal), each with provenance (`source` + `ref`); FR-018 positive default when no high-priority signals. The LLM (`narrate_opener`) writes only the opening `text` + `reason.summary`, rephrasing the given points (no new facts/numbers/brands); suggestion only (FR-011). New schemas: `Opener.talking_points` + `TalkingPoint`/`OpenerSource`. Depends on T006, T023/T027/T033
-- [ ] T037 [US5] Wire the `opener` node into the graph and implement `GET /api/brief/{rep_id}` (full 5-section brief, RBAC `403` on out-of-scope, audit record) in `src/coach/api/app.py`. Depends on T015, T016, T036, and T028/T031/T034
+- [X] T037 [US5] Wire the `opener` node into the graph and implement `GET /api/brief/{rep_id}` (full 5-section brief, RBAC `403` on out-of-scope, audit record) in `src/coach/api/app.py`. Depends on T015, T016, T036, and T028/T031/T034. Calls the orchestrator (`build_brief`) with the caller's `AccessContext` threaded through every node (RBAC + PRP hold; PRP HCPs never appear); out-of-scope AND not-found both return the same `403` (FR-014 — no existence leak); narrate-before-expose re-asserted before returning; one privacy-safe audit record per brief
 
 **Checkpoint**: All five sections of the brief are generated.
 
@@ -191,7 +191,7 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 
 - [X] T038 Implement the **5-section checklist rubric** e2e test in `tests/e2e/test_brief_rubric.py` — a brief PASSES only if all 5 sections are present AND every recommendation has a visible reason (encodes the fixed rubric via `assembly.rubric_violations`; SC-002). **Consistency check (SC-004)**: run the brief twice for the same seeded DM → identical brief (skeleton + facts + deterministic wording). Plus the **narrate-before-expose guard** (assembly RAISES on a placeholder), **RBAC** (out-of-scope rep → `ScopeError`) + **PRP** (PRP accounts never appear in the brief), and the **FR-018** no-history rep (valid, rubric-passing brief with an `EmptyState` ride-along)
 - [ ] T039 [P] Implement the minimal web page in `web/index.html` — renders the 5 sections and each `reason` block (suggestions only; DM decides)
-- [ ] T040 [P] Audit assertions in `tests/e2e/test_audit.py` — one record per brief generation and per LLM call; no out-of-scope data, no raw PII. **Privacy-in-logging (FR-016)**: assert HR-sensitive rep fields and private HCP fields are never logged or serialized outside their allowed scope (use the field-level classification from T014)
+- [X] T040 [P] Audit assertions in `tests/e2e/test_audit.py` — one record per brief generation (and per reps list); no out-of-scope data, no raw PII. **Privacy-in-logging (FR-016)**: asserts HR-sensitive rep fields and private HCP fields are never logged (capture the request-path logs and assert rep/HCP names are absent; assert the audit record carries ONLY allow-listed safe fields), and that `build_audit_record` refuses a HR-sensitive field (uses the field-level classification from T014)
 - [ ] T041 [P] Synthetic-only guard test in `tests/e2e/test_synthetic_only.py` — every data response carries `synthetic=true`; no real connector is configured (SC-007)
 - [ ] T042 End-to-end run of quickstart.md scenarios A–D in `tests/e2e/test_quickstart.py` (happy path, RBAC, empty/sparse, determinism golden)
 - [ ] T043 [P] Update `README.md` / docs with run + eval instructions (`/gen-synthetic-data`, `/run-checklist-eval`)
@@ -203,18 +203,21 @@ plan's "interface first, generator early, RBAC in the data layer" rules.
 > These depend on API routes that do not exist yet. Add them once the relevant routes
 > are implemented — do not lose track of them.
 
-- **F6 — SUPERSEDED** (was: read-only API guard — assert only `GET` routes, no
-  write/mutation path). Superseded because region-level roles now have **write/action
-  access** (e.g., add notes, flag a rep), so write/action paths will exist. The
-  "assistant never acts on its own" rule (FR-011) is unchanged and is still tested via the
-  suggestion-only checks (e.g., T035); replace F6 with per-route authorization tests when
-  write routes are designed.
+- **F6 — SUPERSEDED → SATISFIED for the read-only MVP API** (was: read-only API guard —
+  assert only `GET` routes, no write/mutation path). The current MVP API is **entirely
+  read-only**, so this is now asserted directly: `tests/e2e/test_api.py::test_only_get_routes_are_exposed`
+  fails if any route exposes a non-GET (POST/PUT/PATCH/DELETE) verb (FR-011, suggestion-only).
+  When region-level **write/action** routes are later designed, extend this with per-route
+  authorization tests (region roles have full access, not read-only).
 - **F7** — Graceful degrade for `GET /api/brief/{rep_id}`: when later sections (US2–US4)
   are not yet wired, the endpoint degrades gracefully instead of failing (US5 independence).
-- **F8 — SUPERSEDED** (was: assert an RBD `read_only=true` cannot reach a write/action
-  path). Superseded by the scope-level model — region-level roles have full access, not
-  read-only. Replace with **scope-level authorization tests** (e.g., a `district`-level DM
-  cannot act outside its district) when write/action routes exist.
+- **F8 — SUPERSEDED → SATISFIED for reads by scope-level route tests** (was: assert an RBD
+  `read_only=true` cannot reach a write/action path). Replaced by scope-level **authorization
+  tests over the API** in `tests/e2e/test_api.py`: a `district` DM sees only their district
+  (`test_dm_reps_are_scoped_to_their_district`), `region`/`all` see wider scopes, an
+  out-of-scope `rep_id` is a `403` indistinguishable from not-found (FR-014), and the caller
+  **cannot widen their own scope via input** (`test_caller_cannot_widen_scope_via_input`).
+  Extend with write/action-route authorization tests when those routes exist.
 - **C2 (deferred)** — A dedicated performance-validation task for SC-001 / the ≤10s p95 brief-assembly goal is intentionally deferred for the MVP (no perf test task in scope).
 
 ---

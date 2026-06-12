@@ -60,11 +60,18 @@ class NotesRetriever:
         embedder: EmbeddingProvider,
         vector_store: VectorStore | None = None,
     ) -> None:
-        self._conn: sqlite3.Connection = store._conn
+        # Hold the STORE (not a captured connection) so RBAC/PRP helpers always run on the
+        # current thread's connection — the orchestrator queries the retriever on parallel
+        # worker threads, and each must use its own connection (see SqliteStore._conn).
+        self._store = store
         self._embedder = embedder
         self._index: VectorStore = vector_store or InMemoryVectorStore()
         self._sessions: dict[str, CoachingSession] = {}
         self._account_by_session: dict[str, str] = {}
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        return self._store._conn
 
     # ------------------------------------------------------------------- indexing
     def index(self) -> None:
