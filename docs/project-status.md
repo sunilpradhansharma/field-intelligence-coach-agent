@@ -25,11 +25,12 @@ synthetic.
 
 ## 2. Current status — BUILT (in the repo now)
 
-**Phases 1–6 are COMPLETE and tested — the MVP (the morning coaching brief) is now
+**Phases 1–6 are COMPLETE and tested — the MVP (the morning coaching brief) is
 FEATURE-COMPLETE end to end:** synthetic data → RBAC/PRP data-access layer → deterministic
 ranking → the five brief sections → the orchestrated, narrated, validated brief → the read-only
-FastAPI API → the read-only web UI. `pytest` → **129 passed**. Phases 7–10 (theme aggregation,
-Summit optimization, covariant analysis, verbal-feedback / CLOSE) are PLANNED.
+FastAPI API → the read-only web UI. **Phase 7 (theme aggregation, capability #6) is also DONE.**
+`pytest` → **142 passed**. Phases 8–10 (Summit optimization, covariant analysis,
+verbal-feedback / CLOSE) are PLANNED.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -335,6 +336,41 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   narrator phrases the already-computed structured reason — it never ranks, scores, or invents
   numbers (Principle I/VI/VIII).
 
+### Phase 7 (COMPLETE) — theme aggregation (capability #6) — tasks P7-T1, P7-T2, P7-T3
+(`src/coach/components/theme_aggregation.py`, FR-013/FR-014/FR-016; the first post-MVP capability):
+- **Deterministic roll-up from the SAME shared signals — no drift.** For each in-scope rep it
+  reuses `coaching_focus_for_rep` (which uses the shared `compute_rep_signals` + the config focus
+  catalog), then counts reps per focus area — so a "theme" *is* a per-rep coaching focus, not a
+  second drifting definition. Themes are ranked by rep-count (stable tie-break). All grouping,
+  counting, and ordering is pure code; a test asserts the aggregate equals an independent per-rep
+  tally, and that every theme label is a real catalog entry.
+- **Patterns / counts ONLY — never named individuals (FR-016), enforced STRUCTURALLY.** The new
+  `Theme` / `ThemeAggregate` schemas have **no rep-identity field** (no `rep_id` / `name`), so an
+  aggregated theme cannot carry an individual; the code only ever writes counts (reps-in-scope /
+  reps-with-theme / share + per-district counts) into the reason. Verified by a **substring**
+  privacy test (no seeded rep id or name appears anywhere in the serialized output, nor in the
+  LLM input).
+- **RBAC-scoped to leadership.** Aggregation is **region / all only** — `_require_leadership_scope`
+  raises `ScopeError` for any scope below region, so a **DM (district) or a rep (self) is
+  rejected** (a `403`, indistinguishable from not-found, over the API). Region isolation is real:
+  the in-scope reps come from `data.get_reps(ctx)` (region-filtered at the data layer), so a
+  region caller can never aggregate another region (proved with a 2-region dataset).
+- **Small-cell suppression (privacy).** A new **config-visible, tunable threshold**
+  `Settings.aggregation_min_cell` (default 3, env `COACH_AGGREGATION_MIN_CELL`) suppresses any
+  grouping cell — a theme's total **or** a per-district count — below the threshold: it is masked
+  ("fewer than N (suppressed)" / a "<N each" marker), **never shown as a raw small count**, so a
+  small group (e.g. a 1-rep district) can't identify an individual. The scope total is never a
+  small cell. Suppressed cells mask `rep_count` / `rep_share` to `None` and set `suppressed=True`.
+- **LLM limited to wording.** `narrate_theme(s)` is handed **counts / shares only** (no rep
+  identity) and rewrites only `reason.summary` via `model_copy`; an **anti-LLM guard** asserts the
+  theme label, signal, counts, shares, and data points are byte-for-byte unchanged. Model id from
+  config; FakeLLM in tests; no live Bedrock.
+- **Explainability.** Every theme carries a structured `reason` with its supporting counts
+  (FR-010). New schemas `Theme` + `ThemeAggregate`; `Settings.aggregation_min_cell`.
+- **Not built yet (optional next):** a **leadership UI view** that renders these themes (the API
+  endpoint + dashboard) — the aggregation component is done and tested, but no screen/route
+  surfaces it yet.
+
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
   (same seed → identical data), synthetic-only provenance, store round-trip, plus the
@@ -406,9 +442,21 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   mutating fetch — it references only the GET endpoints); the rendered brief carries a
   **non-placeholder reason on every one of the five sections** (FR-010, via the offline fake-LLM
   path); and the **no-history rep** renders a clean empty-state message (FR-018).
+- `tests/component/test_theme_aggregation.py` (**P7-T1/T2/T3**, 13 tests) — Phase 7: a
+  deterministic **golden** (seed 42, region) for the themes/counts/order; **patterns-only**
+  (structural — no rep-identity field — plus a serialized **substring** check that no rep id/name
+  leaks); **same-source** (the aggregate equals an independent per-rep coaching-focus tally);
+  **RBAC** (region/all allowed, a DM + a rep → `ScopeError`, and a **2-region** dataset proving
+  region isolation + predictable count changes); **small-cell suppression** (a small district /
+  rare theme is masked at the default threshold, and changing `aggregation_min_cell` changes what
+  is suppressed predictably); the **anti-LLM guard** (counts unchanged, only `summary` written;
+  no rep id in the LLM input); and **explainability** (counts on every theme).
 - Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, **all four Phase 4
   brief-section components**, **the Phase 5 orchestrator + assembly**, **the Step 5b read-only
-  API**, **and the Phase 6 web UI** all **COMPLIANT** (Principle V scope levels + scope-from-config,
+  API**, **the Phase 6 web UI**, **and the Phase 7 theme aggregation** all **COMPLIANT**
+  (Phase 7: patterns/counts-only enforced structurally + small-cell suppression; RBAC region/all
+  with DM rejected; themes from the shared signals — no drift; aggregation in code, LLM
+  wording-only; reads only through the data-access layer) — (Principle V scope levels + scope-from-config,
   caller cannot choose scope; Principle IV PRP scrubbing — reused helpers, not a bypass, unaffected
   by the per-thread connection change; Principle I/VI/VIII deterministic + fixed DAG (no agentic
   loop) + GET-only/no-mutation (API and UI) + LLM-out-of-deciding + no browser-side ranking +
@@ -590,17 +638,18 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 4** | The **five brief sections**: (1) coaching focus ✅ T026/T027; (2) ride-along prep ✅ (T010/T011 + T029/T030); (3) accounts + per-brand context ✅ T032/T033; (4) opener ✅ T035/T036 | **DONE** (all five sections) |
 | **Phase 5** | **Assembly + rubric + API.** **Step 5a** ✅ — the fixed-DAG **orchestrator + brief assembly + 5-section checklist rubric** (T015, T028, T031, T034, T038; ADR 0003). **Step 5b** ✅ — the **read-only FastAPI API** (T014, T016, T025, T037, T040): GET-only, identity→scope-from-config, per-request connection, FR-014 403, PRP-safe, privacy-safe logging | **DONE** (both steps) |
 | **Phase 6** | **UI** (T039) — minimal read-only web page rendering the 5 sections + each reason; seeded-user selector (API enforces scope); per-brand accounts + mismatch; clean 403/empty states; offline demo server | **DONE** |
-| **Phase 7** | **Theme aggregation** (capability #6) — leadership view of themes across reps: **patterns/counts only, never named individuals**, and **RBAC-scoped** (region/all only, within scope) | **PLANNED** (next) |
-| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic, per-team config); the LLM never scores it | **PLANNED** |
+| **Phase 7** | **Theme aggregation** (capability #6) — leadership view of themes across reps: **patterns/counts only, never named individuals** (structural + small-cell suppression), **RBAC-scoped** (region/all only; DM rejected), deterministic from the shared signals, LLM wording-only (P7-T1/T2/T3) | **DONE** (no leadership UI yet) |
+| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic, per-team config); the LLM never scores it | **PLANNED** (next) |
 | **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (deterministic, not LLM-decided); needs a defined "success" measure | **PLANNED** |
 | **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — **record** the DM's post-ride observations (first **write** path): same door, writer-scope RBAC, PRP-scrubbed on readback (ADR 0002) | **PLANNED** |
 
-> ✅ **MVP FEATURE-COMPLETE (Phases 1–6).** The morning coaching brief now runs end to end:
-> **synthetic data → RBAC/PRP data-access layer → deterministic ranking → the five brief
-> sections → the orchestrated, narrated, validated brief → the read-only API → the read-only
-> web UI.** `pytest` → **129 passed**. **Phases 7–10 (capabilities #6/#5/#4/#2) are PLANNED**,
-> with **Phase 7 (theme aggregation) the immediate next action**; the OPEN items (§5) are
-> enhancements / next capabilities, **not gaps in the MVP**.
+> ✅ **MVP FEATURE-COMPLETE (Phases 1–6) + Phase 7 (theme aggregation) DONE.** The morning
+> coaching brief runs end to end (**synthetic data → RBAC/PRP data-access layer → deterministic
+> ranking → the five brief sections → the orchestrated, narrated, validated brief → the read-only
+> API → the read-only web UI**), and the first post-MVP capability (#6, the leadership theme
+> roll-up) is built. `pytest` → **142 passed**. **Phases 8–10 (capabilities #5/#4/#2) are
+> PLANNED**, with **Phase 8 (Summit optimization) the immediate next action**; the OPEN items
+> (§5) are enhancements / next capabilities, **not gaps in the MVP**.
 
 ### Diagrams
 
@@ -625,8 +674,9 @@ inline `<svg>` code):
    components (coaching-focus, notes-retriever, ride-along-prep, accounts-context, opener) +
    the **orchestrator + assembly** (`src/coach/orchestrator/`) + the **read-only API**
    (`src/coach/api/app.py`), **audit/logging** (`src/coach/observability/audit.py`), the
-   **web UI** (`web/index.html`), and the **offline demo server** (`src/coach/api/demo.py`),
-   and run `uv run pytest -q` to confirm the suite is green (**129 passing**).
+   **web UI** (`web/index.html`), the **offline demo server** (`src/coach/api/demo.py`), and the
+   **Phase 7 theme aggregation** (`src/coach/components/theme_aggregation.py`),
+   and run `uv run pytest -q` to confirm the suite is green (**142 passing**).
 
 **Run it locally:**
 - **Offline demo (no AWS, recommended for a walkthrough):** `uv run uvicorn coach.api.demo:app
@@ -637,15 +687,18 @@ inline `<svg>` code):
   `AWS_REGION` / `BEDROCK_EMBED_MODEL_ID` set and a seeded DB
   (`uv run python -m coach.synthetic.generate`).
 
-**Immediate next action (the MVP build is done):**
-1. **Phase 7 — theme aggregation (capability #6)** is the next build: a leadership view of
-   common coaching themes across reps — **patterns and counts only, never named individuals**
-   (FR-016), and **RBAC-scoped** (region/all only, each within their own scope; a scoped,
-   aggregate-only roll-up behind the same data-access door). Phases 8–10 (Summit optimization
-   and covariant analysis — both **computed in code**, not LLM-decided; and verbal-feedback /
+**Immediate next action (MVP done; Phase 7 done):**
+1. **Phase 8 — Summit optimization (capability #5)** is the next build: add the **Summit /
+   IC-plan lift** as a new ranking signal, **computed in code** from data + per-team config (a
+   per-team formula) — deterministic and explainable like the four existing signals; the **LLM
+   never scores it** (anti-LLM-ranking guard holds). Configurable per team. *(Open assumption:
+   the per-team Summit formula is a placeholder until the business shares the real logic — §5.)*
+   Phases 9–10 (covariant analysis — computed in code, not LLM-decided; and verbal-feedback /
    CLOSE — the first **write** path, writer-scope RBAC + PRP-scrubbed on readback per ADR 0002)
    follow.
-2. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
+2. **Optional next for Phase 7:** build a **leadership UI view / API endpoint** that surfaces the
+   theme aggregation (the component is done and tested; no screen/route exposes it yet).
+3. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
    and the visible reasons, and use it to gather feedback (and to drive the workshop + the
    config tuning in §5).
 3. **Diagrams refreshed — DONE.** `README.md` and `docs/technical-architecture.md` now embed
