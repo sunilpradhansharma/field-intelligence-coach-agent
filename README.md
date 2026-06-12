@@ -15,10 +15,13 @@ what happened last time, which accounts matter, and how to open the conversation
 ## MVP scope
 
 > **This is a proof of concept (POC), built spec-first, using synthetic data only.**
-> **Phases 1–4 are complete and tested** — the data-access layer, RBAC + PRP enforcement,
-> the deterministic ranking, and all five brief sections (ranking, coaching focus, ride-along
-> prep, accounts/business context, opener). **Phase 5 (assembly, rubric, API) and Phase 6
-> (UI) are planned.** `pytest` → **89 passing**. See [Phases](#phases) below.
+> **The MVP — the morning coaching brief — is now FEATURE-COMPLETE end to end (all six phases
+> built and tested):** synthetic data → the RBAC/PRP data-access layer → the deterministic
+> ranking → the five brief sections → the orchestrated, narrated, validated brief → the
+> read-only API → the minimal web UI. `pytest` → **125 passing**. See [Phases](#phases) below.
+> The remaining items are **future enhancements, not MVP gaps** (the CLOSE capture capability,
+> Summit ranking optimization, leadership theme aggregation, real data-source connectors, and a
+> perf/latency test).
 >
 > 📌 **Living status & open items:** [`docs/project-status.md`](docs/project-status.md) is
 > the project's living memory — the detailed, up-to-date status, decisions, and open items.
@@ -106,7 +109,7 @@ non-negotiable:
   enforced server-side, not just hidden in the UI. (Exact role names — RD, RBE — and the
   hierarchy are pending confirmation; see [`docs/project-status.md`](docs/project-status.md).)
 - **PRP prescriber-data restriction.** HCPs flagged **PRP** are scrubbed at the
-  data-access layer before any result reaches a field user (planned enforcement, Phase 2).
+  data-access layer before any result reaches a field user (enforced on every read).
 - **Brand-aware data.** Performance is per **(account, brand)**; the five brand names live
   in **one** place (the `Brand` enum) so they are easy to change.
 - **Ranking is deterministic, not LLM-decided.** The rep prioritization is computed in
@@ -128,9 +131,11 @@ today's fake (synthetic) data for real data later without redoing the work above
 
 ![Architecture — the layers, built vs planned](docs/diagrams/architecture.svg)
 
-**Legend:** teal = built; gray = planned. (This diagram is a snapshot of the layers; for the
-current built-vs-planned status see [Phases](#phases) — the data-access layer, RBAC + PRP, the
-ranking, and all five builders are now built; the orchestrator, API, and web app are planned.)
+**Legend:** teal = built; gray = planned. (This diagram is an earlier snapshot of the layers.
+**Status update: all of these layers are now built** — the data-access layer, RBAC + PRP, the
+ranking, all five builders, the orchestrator, the read-only API, and the web app — so the
+gray "planned" shading is out of date; a refreshed diagram is coming. For the current
+built-vs-planned status see [Phases](#phases).)
 
 The **data-access layer is the single door** every part reads through, and it is where
 **RBAC** (scope levels: self / district / region / all) and **PRP scrubbing** are enforced
@@ -176,8 +181,7 @@ The six steps, in plain English:
 
 1. The DM asks for today's brief, the morning of a field ride.
 2. The data-access layer checks the DM's scope (own district only) and scrubs out any PRP
-   physicians, then returns only the data they are allowed to see. (This part is already
-   built.)
+   physicians, then returns only the data they are allowed to see.
 3. The ranking engine scores the reps and produces a ranked list, each rep with a reason.
 4. The DM (or the app) picks the top rep, and the system gathers the rest for that rep:
    coaching focus, what happened last time, key accounts with per-brand business context,
@@ -187,10 +191,10 @@ The six steps, in plain English:
 6. The one-page brief is assembled, with every item showing its reason, and shown to the
    DM.
 
-**What works today vs. planned:** the **data-access layer (with RBAC + PRP enforced), the
-deterministic ranking, and all five brief builders** (coaching focus, ride-along prep,
-accounts/business context, opener) are **built and tested**. The **orchestrator that
-assembles them into one brief, the API, and the web app are planned** (see [Phases](#phases)).
+**This whole flow is now built and tested.** The **data-access layer (with RBAC + PRP
+enforced), the deterministic ranking, all five brief builders** (coaching focus, ride-along
+prep, accounts/business context, opener), the **orchestrator that assembles them into one
+brief, the read-only API, and the web app** are all in place (see [Phases](#phases)).
 
 ---
 
@@ -221,26 +225,27 @@ fair (fixed weights, the same for every rep).
 For engineers, a detailed technical reference lives in
 **[docs/technical-architecture.md](docs/technical-architecture.md)**. It covers the package
 map under `src/coach/`, the data-access seam (`DataAccess`/`Retriever` Protocols,
-`AccessContext`, `ScopeError`), the data model, the planned LangGraph orchestration and
+`AccessContext`, `ScopeError`), the data model, the LangGraph orchestration and the
 deterministic ranking, the coaching-notes RAG, LLM integration, the explainability
-contract, security/privacy, the testing strategy, and the POC→AWS production mapping. Each
-part is clearly marked **built now (Phase 1)** or **planned (later phase)** so the doc
-stays honest about the current code.
+contract, security/privacy, the testing strategy, and the POC→AWS production mapping.
+(That doc still labels some layers by their original build phase and is being refreshed now
+that all six phases are built — the README [Phases](#phases) section below is the current
+source of truth.)
 
 ---
 
 ## Tech stack
 
 - **Language:** Python 3.11+
-- **API:** FastAPI (planned)
+- **API:** FastAPI — read-only GET endpoints (`/api/whoami`, `/api/reps`, `/api/brief/{rep_id}`)
 - **Orchestration:** LangGraph — an explicit, code-defined DAG (no autonomous agent
-  loops), so the flow stays testable and reviewable (planned)
+  loops), so the flow stays testable and reviewable
 - **LLM:** Claude on **Amazon Bedrock**; the model id is read from configuration, never
   hard-coded
-- **Stores (MVP):** SQLite / DuckDB for structured data; FAISS / Chroma for the
-  coaching-notes RAG
+- **Stores (MVP):** SQLite / DuckDB for structured data; an in-memory vector store for the
+  coaching-notes RAG (→ FAISS / Chroma / Bedrock Knowledge Bases in production)
 - **Validation:** Pydantic schemas (including the structured `Reason` object)
-- **Tests:** pytest (unit now; component and end-to-end planned)
+- **Tests:** pytest — unit, component, and end-to-end (125 tests)
 - **Tooling:** `uv` for environments/deps; `ruff` for lint + format
 
 ---
@@ -268,20 +273,21 @@ field-intelligence-coach-agent/
 │   ├── config/settings.py          # BUILT — model id (from env), seed, fixed ranking weights
 │   ├── data_access/
 │   │   ├── interface.py            # BUILT — DataAccess + Retriever + AccessContext + ScopeError
-│   │   └── sqlite_store.py         # BUILT — structured store (RBAC enforcement is T008)
+│   │   ├── rbac.py                 # BUILT — scope-level RBAC + PRP scrubbing helpers
+│   │   ├── sqlite_store.py         # BUILT — structured store (RBAC + PRP enforced on every read)
+│   │   └── notes_retriever.py      # BUILT — coaching-notes RAG (RBAC + PRP at query time, ADR 0002)
 │   ├── synthetic/generate.py       # BUILT — seeded synthetic data generator (CLI)
-│   ├── components/                 # placeholder — the 5 brief sections (planned)
-│   ├── llm/                        # placeholder — Bedrock Claude + embeddings (planned)
-│   ├── guardrails/                 # placeholder — PII guardrail seam (planned)
-│   ├── orchestrator/               # placeholder — LangGraph DAG + brief assembly (planned)
-│   ├── observability/              # placeholder — per-brief / per-LLM audit (planned)
-│   └── api/                        # placeholder — FastAPI app (planned)
+│   ├── components/                 # BUILT — the 5 brief sections (ranking, focus, ride-along, accounts, opener)
+│   ├── llm/                        # BUILT — Bedrock Claude client + embeddings + narration (wording only)
+│   ├── orchestrator/               # BUILT — LangGraph DAG (brief_graph) + assembly + rubric (ADR 0003)
+│   ├── observability/              # BUILT — privacy-safe per-brief audit / logging
+│   ├── api/                        # BUILT — read-only FastAPI app + offline demo server
+│   └── guardrails/                 # placeholder — PII guardrail seam (future enhancement)
 ├── tests/
-│   ├── unit/test_schemas.py        # BUILT — every recommendation requires a non-empty reason
-│   ├── unit/test_data_access.py    # BUILT — seeded shape, determinism, synthetic provenance
-│   ├── component/                  # planned — per-component tests
-│   └── e2e/                        # planned — rubric, audit, synthetic-only, quickstart
-└── web/                            # placeholder — minimal brief UI (planned)
+│   ├── unit/                       # BUILT — schemas, data-access, RBAC, PRP, ranking (+ golden)
+│   ├── component/                  # BUILT — coaching focus, notes retriever, ride-along, accounts, opener
+│   └── e2e/                        # BUILT — brief rubric, API (RBAC/PRP/403), audit, UI
+└── web/index.html                 # BUILT — minimal read-only brief UI
 ```
 
 **Recommended reading order for a newcomer:**
@@ -377,21 +383,32 @@ uv sync
 # 2. Generate the seeded synthetic dataset (repeatable; writes ./data/coach.db)
 uv run python -m coach.synthetic.generate --seed 42
 
-# 3. Run the test suite (89 tests today)
+# 3. Run the test suite (125 tests)
 uv run pytest
 ```
 
 Lint and format (optional): `uv run ruff check --fix . && uv run ruff format .`
 
-> The API (`uvicorn coach.api.app:app --reload`) and the web UI are planned and not yet
-> runnable.
+**See the brief in a browser:**
+
+```bash
+# Offline demo — no AWS needed. Auto-seeds synthetic data and uses an offline
+# narrator + fake embeddings, so the whole page renders with no live Bedrock call.
+uv run uvicorn coach.api.demo:app --reload
+# then open http://127.0.0.1:8000/  (switch the seeded user dm_d1 / dm_d2 /
+# region_r1 / hos_1 to see RBAC scope change; open a rep for the full brief)
+```
+
+For the production wiring, run `uv run uvicorn coach.api.app:app --reload` with the Bedrock
+config set (`BEDROCK_MODEL_ID`, `AWS_REGION`, `BEDROCK_EMBED_MODEL_ID`) and a seeded DB; both
+serve the same read-only page at `/`.
 
 ---
 
 ## Phases
 
-Honest status: **Phases 1–4 are Done; Phase 5 (assembly, rubric, API) is next, then Phase 6
-(UI).** `pytest` → **89 passing**. Task IDs below come straight from
+Honest status: **all six phases are Done — the MVP is feature-complete end to end.**
+`pytest` → **125 passing**. Task IDs below come straight from
 `specs/001-morning-coaching-brief/tasks.md`; the detailed, living status is in
 [`docs/project-status.md`](docs/project-status.md).
 
@@ -445,32 +462,53 @@ Each section: the logic is decided in **deterministic code**, every item carries
 *(The per-section wiring/endpoint tasks — T028, T031, T034, T037 — land with the orchestrator
 and API in Phase 5.)*
 
-### Phase 5 — Assembly, rubric, API · STATUS: ⏳ Planned (next)
+### Phase 5 — Assembly, rubric, API · STATUS: ✅ Done
 
-- **Goal:** join the five sections into the full brief, prove its quality, and expose it
-  safely (incl. **narrate-before-expose** — no `PENDING_*` placeholder reaches a user).
-- **Delivers:** the LangGraph assembly and FastAPI app (T015 orchestrator + brief
-  assembly, T016 API skeleton); the **5-section checklist rubric** plus the
-  **consistency check** (T038); **privacy-in-logging** / audit (T040); the synthetic-only
-  guard (T041); and end-to-end quickstart checks (T042). Then the deferred guards
-  **F6** (read-only API — no write routes), **F7** (graceful degrade of the brief
-  endpoint), and **F8** (the region-level role cannot reach a write/action path).
-  > ⚠️ **F6/F8 under review:** now that the region-level role has **full (write) access**
-  > (can add notes / flag a rep), these read-only guards must be reconsidered — write/action
-  > paths will exist. See the OPEN items in [`docs/project-status.md`](docs/project-status.md).
+- **Delivers:** the **LangGraph orchestrator** — a fixed, deterministic DAG (no agentic loop)
+  that threads the `AccessContext` through every section node (RBAC + PRP hold brief-wide) —
+  plus brief assembly with **narrate-before-expose** (an un-narrated `PENDING_*` placeholder can
+  never reach a user, [ADR 0003](docs/adr/0003-orchestration-and-narrate-before-expose.md)); the
+  **5-section checklist rubric** + the **consistency check**; the **read-only FastAPI API**
+  (GET-only `/api/whoami`, `/api/reps`, `/api/brief/{rep_id}`) with identity → role → scope from
+  config (the caller can't choose scope), an out-of-scope rep returned as a `403`
+  indistinguishable from not-found (FR-014), and a **per-request DB connection**; and
+  **privacy-safe audit logging** (HR-sensitive rep fields / private HCP fields / raw PII are
+  never logged).
+- **Tasks:** T015 (orchestrator + assembly), T038 (rubric + consistency), T014/T016/T025/T037
+  (audit module + API endpoints), T040 (privacy-in-logging). The superseded read-only guards
+  **F6/F8** are now satisfied by the read-only-surface test and the RBAC route tests.
 
-### Phase 6 — UI · STATUS: ⏳ Planned
+### Phase 6 — UI · STATUS: ✅ Done
 
-- **Goal:** a simple web page that shows the brief and every reason block (suggestions
-  only; the DM decides).
-- **Delivers:** the minimal `web/index.html` page — T039.
+- **Delivers:** the minimal `web/index.html` — a **read-only** single page (served at `/` by the
+  FastAPI app) that calls **only** the GET API and renders exactly what it returns (no
+  client-side ranking or business logic). It lets the viewer act as a seeded user (the API
+  enforces scope), shows the ranked reps with their priority reason, opens a rep to the full
+  five-section brief, **shows the reason under every recommendation** (FR-010), labels accounts
+  **by brand** with the mismatch flag, and handles empty states and a clean `403` without
+  revealing whether a rep exists. An **offline demo server** (`coach.api.demo`) runs the whole
+  page with no live Bedrock call.
+- **Tasks:** T039.
 
-### Planned additional capability — the CLOSE · STATUS: ⏳ Planned (new spec)
+---
 
-- **Goal:** support the **CLOSE** coaching moment (end of session) alongside the OPEN
-  morning brief — capturing observations and the areas of focus/development going forward.
-- **Status:** needs its own spec; informed by an upcoming coaching workshop (~60 min with
-  a few DMs and RDs). See [`docs/project-status.md`](docs/project-status.md).
+> ✅ **MVP feature-complete (Phases 1–6).** The morning coaching brief runs end to end:
+> synthetic data → RBAC/PRP data-access → deterministic ranking → the five sections →
+> orchestrated, narrated, validated brief → read-only API → web UI. The items below are
+> **future enhancements, not MVP gaps.**
+
+### Future enhancements (not MVP gaps)
+
+- **The CLOSE capture capability** — the end-of-session coaching moment (observations + areas of
+  focus/development), alongside the OPEN morning brief. Needs its own spec; informed by an
+  upcoming coaching workshop (~60 min with a few DMs and RDs).
+- **Summit ranking optimization** — fold Summit/IC-plan logic into prioritization (configurable
+  per team).
+- **Leadership theme aggregation** — roll-ups of coaching themes across districts/regions for
+  leadership (the MVP deliberately has no cross-district aggregation).
+- **Real data-source connectors** — swap the synthetic stores for real connectors (Veeva, IQVIA,
+  Aurora/Athena, Bedrock Knowledge Bases) behind the same data-access interface.
+- **Performance / latency test (SC-001)** — a dedicated perf check, deferred for the MVP.
 
 ---
 
@@ -483,8 +521,8 @@ and API in Phase 5.)*
   spend by rep (it is *not* a team). **APEX** is the internal analytics support team (a
   support team / secondary user, *not* a data source).
 - **PRP (prescriber data restriction):** HCPs flagged PRP are **scrubbed at the
-  data-access layer** before any result reaches a field user (modeled now; enforcement in
-  Phase 2). The brand portfolio modeled is LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid,
+  data-access layer on every read** before any result reaches a field user (enforced and
+  tested). The brand portfolio modeled is LUPRON PEDS, LUPRON URO, LUPRON GYN, Synthroid,
   and LILETTA, held in one `Brand` enum.
 - This is a **commercial system, not GxP** — but it is designed to be governed, secure,
   and auditable from day one.
