@@ -227,8 +227,10 @@ suggested opener appears that references the rep's specific situation.
   their whole region), and **all regions** (the top sales role). All **non-rep** roles have
   **full access within their scope** (NOT read-only); region-level and above also carry
   action rights. **Roles map to a scope level via a single config/enum source** — role
-  names are configuration, not hard-coded logic. The MVP does NOT provide cross-district
-  aggregation or roll-up views.
+  names are configuration, not hard-coded logic. The MVP (Phases 1–6) does NOT provide
+  cross-district aggregation or roll-up views; roll-ups are introduced later as a **scoped,
+  aggregate-only** leadership view (Phase 7 — patterns and counts only, never named
+  individuals, and only within the viewer's own scope; see *Future Capabilities (Phases 7–10)*).
 - **FR-014**: System MUST deny and exclude any rep, account, HCP, or district outside
   the user's territory scope, in data results (not only in the display).
 - **FR-015**: System MUST use only synthetic data in this MVP and MUST NOT connect to or
@@ -330,10 +332,49 @@ suggested opener appears that references the rep's specific situation.
 
 ## Out of Scope (MVP)
 
-- Summit ranking optimization.
+Out of scope for the **MVP (Phases 1–6)**. Three of these are now **planned as post-MVP
+capabilities** — see *Future Capabilities (Phases 7–10)* below for their scope and the rules
+they must keep:
+
+- Summit ranking optimization. *(Planned — Phase 8.)*
 - Aggregating coaching themes across districts, regions, or nationally for leadership.
-- Capturing new notes by voice during or after the ride.
+  *(Planned — Phase 7, as a **scoped, aggregate-only** leadership view: patterns and counts
+  only, never named individuals.)*
+- Capturing new notes by voice during or after the ride. *(Planned — Phase 10.)*
 - Connecting to any real or live data source (Veeva, IQVIA, AEBAT — the strategic /
-  speaker-program spend reporting tool, Summit, etc.).
+  speaker-program spend reporting tool, Summit, etc.). *(Remains out of scope — synthetic-only.)*
 - Workflows for secondary users (reps, marketing/sales leadership, training, APEX — the
-  internal analytics support team).
+  internal analytics support team). *(Remains out of scope.)*
+
+## Future Capabilities (Phases 7–10) — planned, post-MVP
+
+These extend the **same architecture** as the MVP and are **not yet built** (status:
+[`docs/project-status.md`](../../docs/project-status.md)). Every one keeps the constitution
+rules intact: **deterministic logic is computed in code; the LLM only narrates wording (never
+decides ranks, scores, or analysis); all reads AND writes go through the single data-access
+door with RBAC scope + PRP scrubbing enforced there; every recommendation carries a visible
+`reason`; data is synthetic-only; and the assistant only suggests/records — the human decides.**
+
+- **Phase 7 — theme aggregation (capability #6).** Read *across* reps to surface common
+  coaching themes for a leadership view. Two invariants are mandatory: **(a)** the
+  aggregated/leadership view shows **patterns and counts only — NEVER named individual reps or
+  individually identifiable rep detail** (FR-016); and **(b)** it is **RBAC-scoped** — only the
+  **region** and **all** scope levels may see it, each only across **their own region / all
+  regions** (it is a scoped, aggregate-only roll-up, not an unscoped one — enforced at the same
+  data-access door). This is the scoped roll-up that FR-013 says the MVP does not yet provide.
+- **Phase 8 — Summit optimization (capability #5).** Add the **Summit / IC-plan lift** as a
+  new **ranking signal**. The lift is **computed in code** from data + per-team config (a
+  per-team formula) — **deterministic and explainable, exactly like the four existing signals;
+  the LLM never scores or decides it** and may only narrate the wording. Configurable per team.
+- **Phase 9 — covariant analysis (capability #4).** Deeper insight in the accounts section —
+  which factors move together with results. The analysis is **computed in code and is
+  deterministic/explainable, NOT LLM-decided**; the LLM may only narrate the resulting
+  structured finding. *Open question:* it needs a defined **"success" measure** first.
+- **Phase 10 — verbal feedback / CLOSE capture (capability #2).** Capture post-ride
+  observations using **Amazon Transcribe (planned)** + a CLOSE record. The assistant **records
+  the human's (the DM's) input — it does not act or auto-generate a plan** (suggestion-only
+  holds). This is the **first write path**: writes go through the **same single data-access
+  door** under the **writer's own scope (writer-scope RBAC)**, and the transcribed free-text
+  CLOSE notes are subject to the **same PRP scrubbing + RBAC on readback** as every other note
+  (per **ADR 0002** — the retriever enforces RBAC + PRP at query time), so a captured note that
+  references a PRP HCP is never surfaced to a field user.

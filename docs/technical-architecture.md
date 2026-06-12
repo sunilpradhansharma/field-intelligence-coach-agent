@@ -38,7 +38,8 @@ read (and, for the write path, every write).
    **leadership / region-level roles** (their whole region, or all regions). Scope is a
    property of the role, resolved server-side (never chosen by the caller).
 2. **Experience** — the **DM workspace** (the read-only morning-brief web page) and a
-   **leadership dashboard** (the aggregated, cross-rep view — Phase 7).
+   **leadership dashboard** (Phase 7 — an **aggregate-only, RBAC-scoped** cross-rep view showing
+   **patterns and counts only, never named individual reps**; region / all scope only).
 3. **API** — a FastAPI service. It resolves the caller's identity into an `AccessContext`
    (role → scope, from config) and exposes read endpoints for the brief; the CLOSE write
    endpoint is the Phase 10 addition.
@@ -47,13 +48,14 @@ read (and, for the write path, every write).
 5. **The five brief builders** — one per section: **prioritize** (deterministic ranking),
    **coaching focus**, **ride-along prep**, **accounts / business context** (per brand), and
    **opener**. Each returns a recommendation carrying a structured `Reason`.
-6. **Intelligence** — the analytics that feed the builders: **Summit / IC-plan** scoring
-   (Phase 8), **covariant analysis** of what moves with results (Phase 9), and **theme
-   aggregation** across reps for leadership (Phase 7).
+6. **Intelligence** — analytics that feed the builders, all **computed in code** (deterministic,
+   explainable — the LLM never scores or decides them): **Summit / IC-plan** lift as a ranking
+   signal (Phase 8), **covariant analysis** of what moves with results (Phase 9), and
+   aggregate-only **theme aggregation** across reps for leadership (Phase 7).
 7. **AI & capture** — **Claude on Amazon Bedrock** (wording only — narrates reasons, drafts
    focus/opener text; never decides ranks/scores), **Titan embeddings** for the notes RAG,
-   **Amazon Transcribe** for verbal feedback, and **CLOSE capture** of post-ride observations
-   (Phase 10).
+   **Amazon Transcribe** *(planned)* for verbal feedback, and **CLOSE capture** of post-ride
+   observations (Phase 10 — the assistant **records** the human's input, it does not act).
 8. **Data-access door** — the single `DataAccess` / `Retriever` seam. **RBAC and PRP scrubbing
    are enforced here on every read** (and every write), so no component can widen scope or see
    a PRP HCP. This is the only layer that talks to the stores.
@@ -72,17 +74,28 @@ turns the structured reason into clear language — it **never decides or reorde
 
 ### Planned next capabilities (Phases 7–10)
 
-Built on the same architecture above; numbered by capability. Current build status lives in
-[`docs/project-status.md`](project-status.md).
+Built on the same architecture above; numbered by capability. Each keeps the constitution
+rules intact (deterministic logic in code; LLM wording only; the single door with RBAC + PRP on
+reads **and** writes; a `reason` on everything; synthetic-only; suggestion/record-only). Current
+build status lives in [`docs/project-status.md`](project-status.md).
 
-- **Capability #6 — theme aggregation (Phase 7):** read *across* reps to surface common
-  coaching themes; powers the leadership dashboard. A new read direction behind the same door.
-- **Capability #5 — Summit optimization (Phase 8):** add Summit / IC-plan logic as a new
-  ranking signal, configurable per team (each team's plan differs).
+- **Capability #6 — theme aggregation (Phase 7):** a leadership view of common coaching themes
+  across reps. It shows **patterns and counts only — never named individual reps or
+  individually identifiable detail** (FR-016), and is **RBAC-scoped**: only the **region** and
+  **all** scope levels see it, each only across their own region / all regions (a scoped,
+  aggregate-only roll-up behind the same data-access door — not an unscoped one).
+- **Capability #5 — Summit optimization (Phase 8):** add the **Summit / IC-plan lift** as a new
+  ranking signal **computed in code** from data + per-team config (a per-team formula) —
+  deterministic and explainable like the four existing signals; **the LLM never scores it**.
 - **Capability #4 — covariant analysis (Phase 9):** deeper insight in the accounts section —
-  which factors move together with results; needs a defined "success" measure first.
-- **Capability #2 — verbal feedback / CLOSE (Phase 10):** capture post-ride observations
-  (Transcribe + CLOSE) — the **first write path** — closing the OPEN→CLOSE loop.
+  which factors move together with results — **computed in code, deterministic and explainable,
+  not LLM-decided** (the LLM only narrates the structured finding); needs a defined "success"
+  measure first.
+- **Capability #2 — verbal feedback / CLOSE (Phase 10):** **record** the DM's post-ride
+  observations (**Amazon Transcribe (planned)** + a CLOSE note) — the assistant records the
+  human's input, it does not act. The **first write path**: writes go through the **same door
+  under the writer's own scope (writer-scope RBAC)**, and the free-text notes are **PRP-scrubbed
+  + RBAC-scoped on readback** like every other note (**ADR 0002**), closing the OPEN→CLOSE loop.
 
 ---
 

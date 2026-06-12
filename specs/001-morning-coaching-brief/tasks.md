@@ -279,3 +279,39 @@ Foundation → US1 (MVP) → US2 → US3 → US4 → US5 (full brief) → Polish
 - All reads are RBAC-scoped at the data layer (T008) — Principle V.
 - Synthetic only; `synthetic=true` enforced (T041) — Principle III.
 - Verify tests fail before implementing; commit after each task or logical group.
+
+---
+
+## Roadmap Phases 7–10 (post-MVP capabilities) — PLANNED, not started
+
+> These are the **roadmap milestones** for capabilities #6/#5/#4/#2 (see *spec.md → Future
+> Capabilities* and [`docs/project-status.md`](../../docs/project-status.md)). They are
+> **separate from the MVP build-phase numbering (Phases 1–8) above** — that numbering belongs
+> to the morning-brief MVP. None of the tasks below is started; each keeps the same
+> constitution rules as the MVP (deterministic logic in code; LLM wording only; the single
+> data-access door with RBAC + PRP on reads AND writes; a `reason` on everything;
+> synthetic-only; suggestion/record-only — the human decides).
+
+### Roadmap Phase 7 — theme aggregation (capability #6)
+
+- [ ] P7-T1 Define the **scoped, aggregate-only** leadership view: a deterministic, code-computed roll-up of coaching themes across reps that returns **patterns and counts only — never named individual reps or individually identifiable detail** (FR-016). The LLM may only narrate the `reason`.
+- [ ] P7-T2 Enforce **RBAC scope** on the aggregation at the data-access door: only the **region** and **all** scope levels may request it, each only across **their own region / all regions** (no unscoped roll-up). PRP scrubbing still applies to any underlying read.
+- [ ] P7-T3 Tests: the view exposes no individual-rep detail and no out-of-scope data; a `district` caller cannot obtain a cross-rep aggregation.
+
+### Roadmap Phase 8 — Summit optimization (capability #5)
+
+- [ ] P8-T1 Add the **Summit / IC-plan lift** as a new ranking signal **computed in code** from data + **per-team config** (a per-team formula), normalized and weighted like the four existing signals — **deterministic and explainable; the LLM never scores or decides it**.
+- [ ] P8-T2 Tests: the Summit signal is deterministic (same data/config → same value); the anti-LLM-ranking guard still holds (narration changes only `reason.summary`); per-team config changes the lift predictably.
+
+### Roadmap Phase 9 — covariant analysis (capability #4)
+
+- [ ] P9-T1 Define the **"success" measure** (open question) the covariant analysis is computed against.
+- [ ] P9-T2 Implement covariant analysis in the accounts section **in code — deterministic and explainable, NOT LLM-decided**; the LLM only narrates the structured finding; every finding carries a `reason`.
+- [ ] P9-T3 Tests: same data → same finding; explainability (a visible reason + the data behind it).
+
+### Roadmap Phase 10 — verbal feedback / CLOSE capture (capability #2)
+
+- [ ] P10-T1 Add the **CLOSE record** (the DM's post-ride observations / development focus), optionally via **Amazon Transcribe** *(planned)*. The assistant **records the human's input — it does not act or auto-generate a plan** (suggestion-only holds).
+- [ ] P10-T2 Implement the **first write path** through the **same data-access door** under the **writer's own scope (writer-scope RBAC)**; never a bypass.
+- [ ] P10-T3 On **readback**, apply the **same PRP scrubbing + RBAC** as every other note (**ADR 0002** — retriever enforces RBAC + PRP at query time): a CLOSE note that references a PRP HCP is never surfaced to a field user.
+- [ ] P10-T4 Tests: write-scope RBAC (a writer cannot write outside their scope); PRP-on-readback (a captured PRP-referencing note is scrubbed); the assistant takes no autonomous action.

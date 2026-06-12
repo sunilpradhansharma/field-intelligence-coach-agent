@@ -444,8 +444,9 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 
 - **MVP = the morning coaching brief** (capabilities 1–4: who to ride with + why; what to
   coach; what happened last time; accounts/HCPs + business context; plus the opener).
-  **Out of scope for the MVP:** Summit ranking optimization and aggregating coaching
-  themes for leadership.
+  **Out of scope for the MVP:** Summit ranking optimization (planned Phase 8) and aggregating
+  coaching themes for leadership (planned Phase 7 — a **scoped, aggregate-only** view:
+  patterns and counts only, never named individuals; region/all scope only).
 - **Clarify answers** (Session 2026-06-07):
   - Ranking uses the **four named signals** — declining share, low call activity in key
     accounts, missed coaching follow-up, business opportunity/risk — with **transparent,
@@ -589,10 +590,10 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 4** | The **five brief sections**: (1) coaching focus ✅ T026/T027; (2) ride-along prep ✅ (T010/T011 + T029/T030); (3) accounts + per-brand context ✅ T032/T033; (4) opener ✅ T035/T036 | **DONE** (all five sections) |
 | **Phase 5** | **Assembly + rubric + API.** **Step 5a** ✅ — the fixed-DAG **orchestrator + brief assembly + 5-section checklist rubric** (T015, T028, T031, T034, T038; ADR 0003). **Step 5b** ✅ — the **read-only FastAPI API** (T014, T016, T025, T037, T040): GET-only, identity→scope-from-config, per-request connection, FR-014 403, PRP-safe, privacy-safe logging | **DONE** (both steps) |
 | **Phase 6** | **UI** (T039) — minimal read-only web page rendering the 5 sections + each reason; seeded-user selector (API enforces scope); per-brand accounts + mismatch; clean 403/empty states; offline demo server | **DONE** |
-| **Phase 7** | **Theme aggregation** (capability #6) — read across reps to surface common coaching themes; leadership dashboard view | **PLANNED** (next) |
-| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan logic as a new ranking signal; configurable per team | **PLANNED** |
-| **Phase 9** | **Covariant analysis** (capability #4) — deeper insight in the accounts section; needs a defined "success" measure | **PLANNED** |
-| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — record observations after the ride; the first **write** path; closes the OPEN→CLOSE loop | **PLANNED** |
+| **Phase 7** | **Theme aggregation** (capability #6) — leadership view of themes across reps: **patterns/counts only, never named individuals**, and **RBAC-scoped** (region/all only, within scope) | **PLANNED** (next) |
+| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic, per-team config); the LLM never scores it | **PLANNED** |
+| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (deterministic, not LLM-decided); needs a defined "success" measure | **PLANNED** |
+| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — **record** the DM's post-ride observations (first **write** path): same door, writer-scope RBAC, PRP-scrubbed on readback (ADR 0002) | **PLANNED** |
 
 > ✅ **MVP FEATURE-COMPLETE (Phases 1–6).** The morning coaching brief now runs end to end:
 > **synthetic data → RBAC/PRP data-access layer → deterministic ranking → the five brief
@@ -637,10 +638,13 @@ inline `<svg>` code):
   (`uv run python -m coach.synthetic.generate`).
 
 **Immediate next action (the MVP build is done):**
-1. **Phase 7 — theme aggregation (capability #6)** is the next build: read *across* reps to
-   surface common coaching themes for a leadership view (a new read direction behind the same
-   data-access door). Phases 8–10 (Summit optimization, covariant analysis, verbal-feedback /
-   CLOSE) follow.
+1. **Phase 7 — theme aggregation (capability #6)** is the next build: a leadership view of
+   common coaching themes across reps — **patterns and counts only, never named individuals**
+   (FR-016), and **RBAC-scoped** (region/all only, each within their own scope; a scoped,
+   aggregate-only roll-up behind the same data-access door). Phases 8–10 (Summit optimization
+   and covariant analysis — both **computed in code**, not LLM-decided; and verbal-feedback /
+   CLOSE — the first **write** path, writer-scope RBAC + PRP-scrubbed on readback per ADR 0002)
+   follow.
 2. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
    and the visible reasons, and use it to gather feedback (and to drive the workshop + the
    config tuning in §5).

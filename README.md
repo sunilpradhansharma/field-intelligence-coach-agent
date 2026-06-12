@@ -45,9 +45,14 @@ what happened last time, which accounts matter, and how to open the conversation
 
 ### Out of scope (MVP / later)
 
-- **Summit ranking optimization.**
-- **Leadership theme aggregation** across districts or regions (no roll-ups).
-- **Capturing notes by voice** during or after a ride.
+Out of scope for the **MVP (Phases 1–6)**; the first three are **planned post-MVP** (see the
+[Roadmap](#roadmap)):
+
+- **Summit ranking optimization.** *(Planned — Phase 8.)*
+- **Leadership theme aggregation** across districts or regions. The MVP has **no roll-ups**;
+  roll-ups arrive in **Phase 7** as a **scoped, aggregate-only** leadership view (patterns and
+  counts only, never named individuals; region / all scope only).
+- **Capturing notes by voice** during or after a ride. *(Planned — Phase 10.)*
 - **Any connection to real or live data** (Veeva, IQVIA, **AEBAT** — the strategic /
   speaker-program spend reporting tool/website, Summit, etc.) — the MVP is synthetic-only.
 
@@ -88,8 +93,9 @@ single brief made of **five sections**:
    referencing this rep's specific situation. A suggestion the DM can edit or ignore.
 
 **In scope for the MVP:** these five brief sections, scoped to the user's own territory.
-**Out of scope for the MVP:** Summit ranking optimization, and aggregating coaching themes
-across districts/regions for leadership roll-ups.
+**Out of scope for the MVP:** Summit ranking optimization (planned Phase 8) and aggregating
+coaching themes for leadership (planned Phase 7 — a **scoped, aggregate-only** view showing
+patterns and counts, never named individuals).
 
 ---
 
@@ -431,10 +437,10 @@ system; this roadmap shows what is built today versus planned next.
 | Phase | Scope | Status |
 |---|---|---|
 | **Phases 1–6** | **The morning coaching brief** — synthetic data → RBAC/PRP data-access → deterministic ranking → the five sections → orchestrated, narrated, validated brief → read-only API → web UI | ✅ **Done** |
-| **Phase 7** | **Theme aggregation** (capability #6) — read across reps to surface common coaching themes for a leadership view | ⏳ Planned |
-| **Phase 8** | **Summit optimization** (capability #5) — add Summit / IC-plan logic as a ranking signal; configurable per team | ⏳ Planned |
-| **Phase 9** | **Covariant analysis** (capability #4) — deeper insight in the accounts section; needs a defined "success" measure | ⏳ Planned |
-| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — record observations after the ride; the first write path; closes the loop | ⏳ Planned |
+| **Phase 7** | **Theme aggregation** (capability #6) — a leadership view of themes across reps: **patterns and counts only, never named individuals**, and **RBAC-scoped** (region / all only, within their own scope) | ⏳ Planned |
+| **Phase 8** | **Summit optimization** (capability #5) — the Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic, per-team config); the LLM never scores it | ⏳ Planned |
+| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (deterministic, not LLM-decided); needs a defined "success" measure | ⏳ Planned |
+| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — **record** the DM's post-ride observations (the first write path): same door, writer-scope RBAC, PRP-scrubbed on readback | ⏳ Planned |
 
 Task IDs for the built phases come straight from `specs/001-morning-coaching-brief/tasks.md`;
 the detailed, living build status is in [`docs/project-status.md`](docs/project-status.md).
@@ -524,16 +530,28 @@ and API in Phase 5.)*
 ### Phases 7–10 (planned) — next capabilities
 
 These extend the same architecture (and the complete-target diagram above); none is a gap in
-the morning-brief MVP.
+the morning-brief MVP, and each keeps the same rules: deterministic logic in code, the LLM
+narrating wording only, the single data-access door with RBAC + PRP on reads **and** writes, a
+reason on everything, synthetic-only, and suggestion/record-only.
 
-- **Phase 7 — theme aggregation (capability #6):** read *across* reps to surface common
-  coaching themes, for a leadership view. A new read direction behind the same data-access door.
-- **Phase 8 — Summit optimization (capability #5):** add Summit / IC-plan logic as a new
-  ranking signal, configurable per team (each team's plan differs).
+- **Phase 7 — theme aggregation (capability #6):** a leadership view of common coaching themes
+  across reps. It shows **patterns and counts only — never named individual reps or
+  individually identifiable detail** (FR-016), and is **RBAC-scoped**: only the **region** and
+  **all** scope levels see it, each only across their own region / all regions (a scoped,
+  aggregate-only roll-up behind the same data-access door — not an unscoped one).
+- **Phase 8 — Summit optimization (capability #5):** add the **Summit / IC-plan lift** as a new
+  ranking signal **computed in code** from data + per-team config (a per-team formula) —
+  deterministic and explainable like the four existing signals; **the LLM never scores it** and
+  only narrates wording.
 - **Phase 9 — covariant analysis (capability #4):** deeper insight in the accounts section —
-  which factors move together with results; needs a defined "success" measure first.
-- **Phase 10 — verbal feedback / CLOSE capture (capability #2):** record observations after
-  the ride — the first **write** path — closing the OPEN→CLOSE loop.
+  which factors move together with results — **computed in code, deterministic and explainable,
+  not LLM-decided** (the LLM only narrates the structured finding); needs a defined "success"
+  measure first.
+- **Phase 10 — verbal feedback / CLOSE capture (capability #2):** **record** the DM's post-ride
+  observations (via **Amazon Transcribe (planned)** + a CLOSE note) — the assistant records the
+  human's input, it does not act. The first **write** path: writes go through the **same door
+  under the writer's own scope (writer-scope RBAC)**, and the free-text notes are **PRP-scrubbed
+  + RBAC-scoped on readback** like every other note (ADR 0002), closing the OPEN→CLOSE loop.
 
 Also planned (cross-cutting, not numbered capabilities): **real data-source connectors** (swap
 the synthetic stores for Veeva / IQVIA / Aurora / Athena / Bedrock Knowledge Bases behind the
