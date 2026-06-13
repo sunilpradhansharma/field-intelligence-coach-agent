@@ -170,6 +170,11 @@ class Settings:
     bedrock_embed_model_id: str | None = field(
         default_factory=lambda: os.getenv("BEDROCK_EMBED_MODEL_ID")
     )
+    # Amazon Transcribe (Phase 10 Step 10b voice capture): the S3 bucket for the recording + job
+    # output. Used only by the real `AmazonTranscribe` path (never in tests, which use the fake).
+    transcribe_s3_bucket: str | None = field(
+        default_factory=lambda: os.getenv("TRANSCRIBE_S3_BUCKET")
+    )
 
     # Local stores (MVP). Production maps these to Aurora/Athena and Bedrock KB/OpenSearch.
     db_path: str = field(default_factory=lambda: os.getenv("COACH_DB_PATH", "./data/coach.db"))
