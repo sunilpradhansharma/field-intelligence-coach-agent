@@ -25,14 +25,19 @@ synthetic.
 
 ## 2. Current status — BUILT (in the repo now)
 
-**Phases 1–6 are COMPLETE and tested — the MVP (the morning coaching brief) is
-FEATURE-COMPLETE end to end:** synthetic data → RBAC/PRP data-access layer → deterministic
-ranking → the five brief sections → the orchestrated, narrated, validated brief → the read-only
-FastAPI API → the read-only web UI. **Phases 7 (theme aggregation, #6), 8 (Summit optimization,
-#5), and 9 (covariant analysis, #4) are also DONE, and Phase 10 (verbal feedback / CLOSE, #2) is
-IN PROGRESS — Step 10a (the text CLOSE write path) is DONE.** `pytest` → **171 passed**. The only
-remaining roadmap work is **Phase 10 Step 10b** (voice capture — Amazon Transcribe + Claude
-structuring).
+**Phases 1–10 are COMPLETE and tested — ALL SIX original capabilities are now built end to
+end.** The MVP (the morning coaching brief, Phases 1–6) runs end to end (synthetic data →
+RBAC/PRP data-access layer → deterministic ranking → the five brief sections → the orchestrated,
+narrated, validated brief → the read-only API → the read-only web UI), and the four post-MVP
+capabilities are built: **#6 theme aggregation (Phase 7), #5 Summit optimization (Phase 8),
+#4 covariant analysis (Phase 9), and #2 verbal feedback / CLOSE capture (Phase 10 — both Step 10a
+the text write path AND Step 10b voice capture)**. `pytest` → **182 passed**. What remains is
+**productionization** (real data connectors, auth, a polished + leadership UI) and confirming the
+labeled assumptions with the business — not new capabilities (§5, §7).
+
+**All six original capabilities, end to end:** (1) prioritize who to ride with + **why**;
+(2) coaching focus **+ verbal feedback / CLOSE capture**; (3) ride-along prep; (4) business
+outcomes **+ covariant analysis**; (5) **Summit optimization**; (6) **theme aggregation**.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -436,7 +441,7 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   `SuccessMeasure` + the covariant thresholds.
 - **Not built yet (optional next):** wiring the covariant insight into the live brief/API/UI.
 
-### Phase 10 (IN PROGRESS) — verbal feedback / CLOSE capture (capability #2)
+### Phase 10 (COMPLETE) — verbal feedback / CLOSE capture (capability #2)
 **Step 10a — the CLOSE write path (text) — tasks P10-T1…P10-T4 — DONE**
 (`CloseRecord` + `DataAccess.save_close_record`, FR-011/FR-013/FR-014/FR-020; **ADR 0002**):
 - **The first WRITE path, through the single door with writer-scope RBAC.** `save_close_record`
@@ -463,10 +468,28 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
 - **Records the DM's own observations — not autonomous action (FR-011).** The write stores the
   human's input verbatim (no generation/alteration); the system never acts on it.
 
-**Step 10b — voice capture (Amazon Transcribe + Claude structuring) — task P10-T5 — NOT built**
-(the only remaining roadmap work): turn a post-ride voice recording into the `CloseRecord` text,
-which then flows through the SAME Step 10a write path (writer-scope RBAC + PRP-on-readback). Voice
-is the input method only — it does not change the write/RBAC/PRP rules.
+**Step 10b — voice capture — task P10-T5 — DONE**
+(`src/coach/llm/transcribe.py` + `src/coach/components/close_capture.py`; purely additive on
+Step 10a):
+- **Transcription seam** — a `Transcriber` interface with a lazy **`AmazonTranscribe`** (region +
+  S3 bucket from config — `Settings.transcribe_s3_bucket`; boto3 imported on first real use, so
+  importing/constructing needs no AWS creds; the real upload→job→poll→fetch path is `# pragma: no
+  cover`) and a deterministic **`FakeTranscriber`** for tests — **no live AWS call** in CI. Mirrors
+  the LLM / embeddings seams.
+- **Claude structures only the DM's stated items — never invents.** `draft_close_record(_from_voice)`
+  builds a draft `CloseRecord` where **`observations` are the DM's verbatim transcript — the LLM
+  never alters them** (any LLM-supplied observations are ignored). The LLM only EXTRACTS the
+  `agreed_actions` / `observe_next` the DM actually stated; the prompt forbids inventing, an
+  unstated category → an empty list, and an unparseable / non-list response → empty lists (structure
+  nothing rather than fabricate). The LLM stays behind the existing injectable client (model id from
+  config; FakeLLM in tests); it decides nothing and takes no action.
+- **The draft is reviewable before save.** The capture flow **returns a draft and never writes** —
+  the DM reviews/edits, then **saving reuses the Step 10a single-door write path**
+  (`save_close_record`), which re-enforces **writer-scope RBAC** (out-of-scope rejected like
+  not-found) and **PRP fully scrubbed on readback** (body + structured fields + id). **No new write
+  path.** An empty transcript is rejected (validation).
+- **The loop closes via voice.** A voice-captured, DM-saved CLOSE record surfaces in the next
+  ride-along prep via the same scoped + PRP-scrubbed read.
 
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
@@ -572,16 +595,26 @@ is the input method only — it does not change the write/RBAC/PRP rules.
   never surface at any scope (ADR 0002); **collision-free ids** (two records → distinct rows, no
   cross-contamination); validation rejects a malformed record; and the write **records the DM's
   input verbatim** (no autonomous action).
+- `tests/e2e/test_close_capture.py` (**P10-T5 / Step 10b**, 11 tests) — Phase 10 voice: the
+  **deterministic offline `FakeTranscriber`** (no live AWS) + `AmazonTranscribe` constructs without
+  creds (lazy); **structuring fidelity / no fabrication** (observations stay verbatim, the LLM can't
+  alter them; unstated → empty; unparseable → empty; empty transcript rejected); **review before
+  save** (the draft is not persisted; the DM's edit is what saves); **writer-scope RBAC on save**
+  (out-of-scope rejected like not-found); **the loop closes via voice**; and **PRP fully scrubbed**
+  on the voice path (body + structured fields + id, every scope).
 - Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, **all four Phase 4
   brief-section components**, **the Phase 5 orchestrator + assembly**, **the Step 5b read-only
   API**, **the Phase 6 web UI**, **the Phase 7 theme aggregation**, **the Phase 8 Summit
-  optimization**, **the Phase 9 covariant analysis**, **and the Phase 10 Step 10a CLOSE write
-  path** all **COMPLIANT** (Phase 9: config-driven labeled success measure, transparent
-  deterministic association in code — not a black-box model, not LLM-decided — thin data handled
-  honestly, reads only through the data-access layer, anti-LLM guard. Step 10a: write through the
-  single door with writer-scope RBAC, out-of-scope rejected like not-found, the WHOLE record —
-  free text + structured fields + id — PRP-scrubbed on readback, collision-free ids, records the
-  DM's input verbatim — no autonomous action.
+  optimization**, **the Phase 9 covariant analysis**, **and the Phase 10 CLOSE capture (Step 10a
+  write path + Step 10b voice)** all **COMPLIANT** (Phase 9: config-driven labeled success measure,
+  transparent deterministic association in code — not a black-box model, not LLM-decided — thin
+  data handled honestly, reads only through the data-access layer, anti-LLM guard. Phase 10: write
+  through the single door with writer-scope RBAC, out-of-scope rejected like not-found, the WHOLE
+  record — free text + structured fields + id — PRP-scrubbed on readback, collision-free ids,
+  records the DM's input verbatim — no autonomous action. Step 10b voice: Transcribe behind an
+  interface with a fake in tests (no live AWS); Claude structures only the DM's stated items and
+  never invents (observations verbatim); the draft is reviewable; saving reuses the same 10a door —
+  no new write path.
   Phase 7: patterns/counts-only enforced structurally + small-cell suppression; RBAC region/all
   with DM rejected; themes from the shared signals — no drift; aggregation in code, LLM
   wording-only; reads only through the data-access layer. Phase 8: per-team Summit formula
@@ -702,10 +735,9 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 
 ## 5. Open items — OPEN (pending)
 
-> **These are enhancements / next capabilities, NOT gaps in the MVP.** The morning coaching
-> brief is feature-complete and tested end to end (§6); everything below is follow-up work
-> (terminology confirmations, the CLOSE capability, business tuning, and deferred/optional
-> hardening) that does not block the MVP or its demo.
+> **All six capabilities are built (§6); nothing below is a missing capability.** What remains is
+> **assumptions to confirm with the business**, **productionization** (real data connectors, auth,
+> a polished + leadership UI), and optional hardening — follow-up work, not gaps.
 
 - **Confirm "RBE" expansion (terminology only).** Working definition: a **regional
   business support role reporting to the Head of Sales**, with region scope + action
@@ -765,13 +797,29 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   `data-model.md`, `tasks.md` T008/T017/F6/F8, `research.md`, `quickstart.md`,
   `contracts/data-access.md`, `contracts/api.md`). No region "read-only" wording remains
   except the intentional F6/F8 SUPERSEDED history.
-- **Spec the CLOSE capture capability** — a new spec, later (separate from the OPEN MVP).
-- **Schedule the coaching workshop** (~60 min, a few DMs + RDs) — it will inform the
+- **CLOSE capture — BUILT (Phase 10).** The text write path + voice capture are done; any future
+  refinement of the CLOSE structure is informed by the coaching workshop below.
+- **Schedule the coaching workshop** (~60 min, a few DMs + RDs) — it will refine the
   coaching-focus logic and the CLOSE structure.
 - **Receive the de-identified Veeva coaching-note example** — needed to design the
   ride-along-prep RAG over real-shaped notes.
 - **Performance / latency test (SC-001)** is **deferred for the MVP** (no perf test task
   in scope; recorded in `tasks.md` as deferred check "C2").
+- **Productionization (future work, beyond the six capabilities).** None changes a capability;
+  each swaps a synthetic/MVP piece for a managed one behind the existing interfaces:
+  - **Real data-source connectors** — Veeva / IQVIA / Summit / Aurora / Athena / Bedrock
+    Knowledge Bases behind the same `DataAccess` / `Retriever` seam (the single door, RBAC + PRP
+    unchanged); replaces the synthetic generator.
+  - **Real authentication** — Amazon Cognito → `AccessContext` (the API already resolves identity →
+    role → scope from config; swap the `X-User-Id` stub for real authn).
+  - **A polished UI + the leadership UI view** — render the brief richly, and add the
+    **leadership dashboard / API endpoint** that surfaces the Phase 7 themes, Phase 8 Summit
+    insight, and Phase 9 covariant analysis (the components are built and tested; no screen/route
+    exposes them yet).
+  - **Optional hardening from the reviews** — CLOSE `save` audit semantics (the `INSERT OR REPLACE`
+    overwrite-by-id), a mocked integration test for the real `AmazonTranscribe` path, and a
+    layer-level PRP filter on `get_coaching_sessions` (today PRP on the structured fields is
+    enforced by the ride-along `surfaceable` intersection — ADR 0002).
 
 ---
 
@@ -788,16 +836,17 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 7** | **Theme aggregation** (capability #6) — leadership view of themes across reps: **patterns/counts only, never named individuals** (structural + small-cell suppression), **RBAC-scoped** (region/all only; DM rejected), deterministic from the shared signals, LLM wording-only (P7-T1/T2/T3) | **DONE** (no leadership UI yet) |
 | **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic; per-team **config placeholder** formula + tunable `recovery_fraction`); folded into the normalized rollup, **OFF by default**; the LLM never scores it (P8-T1/T2) | **DONE** (no Summit UI yet) |
 | **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (transparent counts/rates/lift, not a black-box model, not LLM-decided); **config-driven** success measure (labeled assumption); thin data handled honestly; reads through the single door (P9-T1/T2/T3) | **DONE** (no covariant UI yet) |
-| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2). **Step 10a** ✅ — the text **CLOSE write path** (P10-T1…T4): first WRITE through the single door, writer-scope RBAC (out-of-scope rejected like not-found), the loop closes into the next ride-along prep, **full PRP scrub on readback** (structured fields + free text; ADR 0002), collision-free ids, records the DM's input verbatim. **Step 10b** ⏳ — voice capture (Transcribe + Claude structuring), P10-T5 | **IN PROGRESS** (Step 10a done; Step 10b next) |
+| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2). **Step 10a** ✅ — the text **CLOSE write path** (P10-T1…T4): first WRITE through the single door, writer-scope RBAC (out-of-scope rejected like not-found), the loop closes into the next ride-along prep, **full PRP scrub on readback** (structured fields + free text; ADR 0002), collision-free ids, records the DM's input verbatim. **Step 10b** ✅ — **voice capture** (P10-T5): `Transcriber` seam (lazy Amazon Transcribe + fake, no live AWS); Claude structures only the DM's stated items (observations verbatim, never invents); reviewable draft; saving reuses the 10a door | **DONE** (both steps) |
 
-> ✅ **MVP FEATURE-COMPLETE (Phases 1–6) + Phases 7, 8, 9 DONE + Phase 10 Step 10a DONE.** The
-> morning coaching brief runs end to end (**synthetic data → RBAC/PRP data-access layer →
+> ✅ **ROADMAP COMPLETE — Phases 1–10 DONE. ALL SIX original capabilities are built end to end.**
+> The morning coaching brief runs end to end (**synthetic data → RBAC/PRP data-access layer →
 > deterministic ranking → the five brief sections → the orchestrated, narrated, validated brief →
-> the read-only API → the read-only web UI**), and the post-MVP capabilities are built: #6
-> (leadership theme roll-up), #5 (Summit optimization), #4 (covariant analysis), and #2's text
-> **CLOSE write path** (Step 10a). `pytest` → **171 passed**. The **only remaining roadmap work is
-> Phase 10 Step 10b** — voice capture (Amazon Transcribe + Claude structuring). The OPEN items
-> (§5) are enhancements / next capabilities / assumptions to confirm, **not gaps**.
+> the read-only API → the read-only web UI**), plus the four post-MVP capabilities: **#6 theme
+> aggregation (Phase 7), #5 Summit optimization (Phase 8), #4 covariant analysis (Phase 9), and #2
+> verbal feedback / CLOSE capture (Phase 10 — text write path + voice)**. `pytest` → **182
+> passed**. What remains is **productionization** (real data connectors, auth, a polished +
+> leadership UI) and confirming the labeled assumptions with the business — **not new
+> capabilities** (§5, §7).
 
 ### Diagrams
 
@@ -824,9 +873,10 @@ inline `<svg>` code):
    (`src/coach/api/app.py`), **audit/logging** (`src/coach/observability/audit.py`), the
    **web UI** (`web/index.html`), the **offline demo server** (`src/coach/api/demo.py`), the
    **Phase 7 theme aggregation** (`theme_aggregation.py`), **Phase 8 Summit** (`summit.py`),
-   **Phase 9 covariant** (`covariant.py`), and the **Phase 10 Step 10a CLOSE write path**
-   (`DataAccess.save_close_record` + `CloseRecord`),
-   and run `uv run pytest -q` to confirm the suite is green (**171 passing**).
+   **Phase 9 covariant** (`covariant.py`), and **Phase 10 CLOSE capture** — the write path
+   (`DataAccess.save_close_record` + `CloseRecord`) and voice (`llm/transcribe.py` +
+   `components/close_capture.py`),
+   and run `uv run pytest -q` to confirm the suite is green (**182 passing**).
 
 **Run it locally:**
 - **Offline demo (no AWS, recommended for a walkthrough):** `uv run uvicorn coach.api.demo:app
@@ -837,25 +887,20 @@ inline `<svg>` code):
   `AWS_REGION` / `BEDROCK_EMBED_MODEL_ID` set and a seeded DB
   (`uv run python -m coach.synthetic.generate`).
 
-**Immediate next action (MVP done; Phases 7–9 done; Phase 10 Step 10a done):**
-1. **Phase 10 — Step 10b — voice capture (capability #2)** is the only remaining roadmap build:
-   **Amazon Transcribe** (model/region from config; lazy boto3; a deterministic offline fake for
-   tests) turns a post-ride voice recording into the `CloseRecord` text — optionally structured by
-   **Claude** into observations / agreed-actions / observe-next — which then flows through the
-   SAME Step 10a write path. **Voice is the input method only; it does not change the
-   write/RBAC/PRP rules** (writer-scope RBAC + full PRP scrub on readback, ADR 0002).
-2. **Optional next for Phases 7–9:** surface the **theme aggregation** (Phase 7), the **Summit
-   insight** (Phase 8), and the **covariant analysis** (Phase 9) in a UI / API endpoint — the
-   components are done and tested, but no screen/route exposes them yet. *(Open assumptions to
-   confirm with the business: the Summit per-team placeholder formula + `recovery_fraction`, and
-   the covariant `SuccessMeasure` — §5.)*
-3. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
-   and the visible reasons, and use it to gather feedback (and to drive the workshop + the
-   config tuning in §5).
-4. **Diagrams refreshed — DONE.** `README.md` and `docs/technical-architecture.md` now embed
-   the four diagrams in [`docs/diagrams/`](diagrams/) as images (architecture, flow-detailed,
-   ranking-rollup, sequence); the old "orchestrator / API / UI planned" diagram captions are
-   gone. See the **Diagrams** subsection in §6.
+**What's next (the roadmap is COMPLETE — all six capabilities built; no new capability is
+pending). The remaining work is productionization + confirming assumptions (§5):**
+1. **Confirm the labeled assumptions with the business** (config-only, no code change): the
+   **Summit** per-team placeholder formula + `recovery_fraction`, the **covariant** `SuccessMeasure`,
+   and the **RD/RBE** role names. Use the coaching workshop + first real-shaped data to tune them.
+2. **Productionize behind the existing interfaces** (none is a new capability): **real data-source
+   connectors** (Veeva / IQVIA / Summit / Aurora / Athena / Bedrock Knowledge Bases behind the same
+   `DataAccess` / `Retriever` door — RBAC + PRP unchanged), **real auth** (Cognito → `AccessContext`),
+   and a **polished UI + the leadership UI view / API endpoint** that surfaces the Phase 7 themes,
+   Phase 8 Summit insight, and Phase 9 covariant analysis (components done; no screen/route shows
+   them yet). Plus the optional review hardening (CLOSE `save` audit semantics; a mocked
+   `AmazonTranscribe` integration test; a layer-level PRP filter on `get_coaching_sessions`).
+3. **Prepare the demo for the business** — run the offline demo (above), walk the brief + the
+   visible reasons (and the voice CLOSE loop), and gather feedback to drive #1.
 
 **Reminders to carry forward:**
 - **Narrate before expose — done and enforced.** `assert_narrated` raises on any surviving
