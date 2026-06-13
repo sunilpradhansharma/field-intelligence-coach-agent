@@ -28,9 +28,9 @@ synthetic.
 **Phases 1–6 are COMPLETE and tested — the MVP (the morning coaching brief) is
 FEATURE-COMPLETE end to end:** synthetic data → RBAC/PRP data-access layer → deterministic
 ranking → the five brief sections → the orchestrated, narrated, validated brief → the read-only
-FastAPI API → the read-only web UI. **Phase 7 (theme aggregation, capability #6) is also DONE.**
-`pytest` → **142 passed**. Phases 8–10 (Summit optimization, covariant analysis,
-verbal-feedback / CLOSE) are PLANNED.
+FastAPI API → the read-only web UI. **Phase 7 (theme aggregation, capability #6) and Phase 8
+(Summit optimization, capability #5) are also DONE.** `pytest` → **154 passed**. Phases 9–10
+(covariant analysis, verbal-feedback / CLOSE) are PLANNED.
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -371,6 +371,40 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   endpoint + dashboard) — the aggregation component is done and tested, but no screen/route
   surfaces it yet.
 
+### Phase 8 (COMPLETE) — Summit optimization (capability #5) — tasks P8-T1, P8-T2
+(`src/coach/components/summit.py`, FR-002/FR-012/FR-013/FR-020; ADR 0001):
+- **Per-team Summit formula in config — a labeled PLACEHOLDER, swappable without code change.**
+  `Settings.summit_formulas` holds a `SummitFormula` per team (= district), resolved by
+  `_formula_for`; the engine reads coefficients from config and **never hard-codes a team's
+  numbers**. The coefficients are documented as a **representative placeholder** (the business
+  will supply the real per-team IC-plan logic — an assumption to confirm), overridable per team
+  config-only.
+- **What-if ranking lift computed deterministically in code.** Each district gets a Summit score
+  from its aggregated (account, brand) inputs; districts are ranked. For a rep, the engine models
+  reducing their top declining rows, recomputes the district score, re-ranks, and reports the
+  **lift** (e.g. position #3 → #1). Pure integer-position arithmetic — the LLM is never involved.
+- **Tunable recovery assumption (per-team config).** How much of a halted decline is assumed to
+  come back is **`SummitFormula.recovery_fraction`** (default **1.0** = full recovery, the prior
+  behavior; env-overridable `COACH_SUMMIT_RECOVERY_FRACTION`). It scales the score rise and each
+  target's projected trend, so a more conservative per-team value is config-only.
+- **Integrated as a normalized signal in the shared rollup (ADR 0001).** `ranking.py::_apply_summit`
+  folds the lift in via the SAME mechanism as the four core signals — raw = lift, normalized 0..1
+  via the config cap, contribution = normalized × the config weight — so config weights stay
+  meaningful (no parallel scoring path). **OFF by default** (`ranking_weights["summit_opportunity"]`
+  = 0.0), so the four-signal MVP ranking, the golden, and the brief are unchanged unless Summit is
+  configured on.
+- **A reason on every Summit insight (FR-010).** Each `SummitInsight` carries a structured reason
+  with the targeted **(account, brand) movements** (current → projected trend, decline reduced) and
+  the **estimated ranking change** (baseline → projected position, lift), with the raw numbers.
+- **LLM limited to wording.** `narrate_summit` is handed the lift/targets only and rewrites only
+  `reason.summary` via `model_copy`; an **anti-LLM guard** asserts the lift, targets, positions, and
+  data points are byte-for-byte unchanged. Reads go **only through the data-access layer** (RBAC
+  scope + PRP scrubbing hold — PRP rows never enter the aggregation or targets). New schemas
+  `SummitInsight` + `SummitTarget`, `SignalName.summit_opportunity`; config `SummitFormula` +
+  `summit_formulas` + `summit_max_targets` + the Summit weight/cap.
+- **Not built yet (optional next):** surfacing the Summit insight in the brief/API/UI — the
+  component + signal integration are done and tested, but no screen/route shows it yet.
+
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
   (same seed → identical data), synthetic-only provenance, store round-trip, plus the
@@ -451,12 +485,27 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   rare theme is masked at the default threshold, and changing `aggregation_min_cell` changes what
   is suppressed predictably); the **anti-LLM guard** (counts unchanged, only `summary` written;
   no rep id in the LLM input); and **explainability** (counts on every theme).
+- `tests/component/test_summit.py` (**P8-T1/T2**, 12 tests) — Phase 8: deterministic Summit
+  scores + the **what-if lift** (lifts 2/1/0 on a 3-district set) and determinism; **per-team
+  config-driven** (identical inputs + different configured formulas → different scores) and the
+  formula scaling scores predictably; **rollup integration** (OFF by default; with a non-zero
+  weight the Summit signal folds in via the normalized rollup — `total_score` = four-signal score
+  + normalized contribution); **explainability** (lift + targets with raw numbers); the **anti-LLM
+  guard**; **RBAC + PRP** (PRP rows scrubbed; a DM aggregates only their own district); and the
+  **`recovery_fraction`** hardening (default 1.0 preserves prior behavior; a different value
+  changes the lift predictably; two teams with different recovery → different results).
 - Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, **all four Phase 4
   brief-section components**, **the Phase 5 orchestrator + assembly**, **the Step 5b read-only
-  API**, **the Phase 6 web UI**, **and the Phase 7 theme aggregation** all **COMPLIANT**
+  API**, **the Phase 6 web UI**, **the Phase 7 theme aggregation**, **and the Phase 8 Summit
+  optimization** all **COMPLIANT**
   (Phase 7: patterns/counts-only enforced structurally + small-cell suppression; RBAC region/all
   with DM rejected; themes from the shared signals — no drift; aggregation in code, LLM
-  wording-only; reads only through the data-access layer) — (Principle V scope levels + scope-from-config,
+  wording-only; reads only through the data-access layer. Phase 8: per-team Summit formula
+  config-driven + labeled placeholder, no hard-coded numbers; the what-if lift computed
+  deterministically in code, not LLM-decided; integrated via the normalized rollup so weights stay
+  meaningful, OFF by default; `recovery_fraction` a tunable per-team config with default 1.0
+  preserving prior behavior; reads only through the data-access layer (RBAC + PRP); anti-LLM guard
+  present) — (Principle V scope levels + scope-from-config,
   caller cannot choose scope; Principle IV PRP scrubbing — reused helpers, not a bypass, unaffected
   by the per-thread connection change; Principle I/VI/VIII deterministic + fixed DAG (no agentic
   loop) + GET-only/no-mutation (API and UI) + LLM-out-of-deciding + no browser-side ranking +
@@ -468,7 +517,10 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   bugs aren't masked; consider auditing denied/`403` access; keep `get_user.name` out of any
   response/log; the UI's seed-picker role labels (RD/Head of Sales) are cosmetic demo text to
   reconcile when the RD/RBE role names are confirmed; tune the ADR 0001 normalization caps with
-  the business.
+  the business. **Phase 8 (Summit):** soften the stale `SummitTarget.projected_share_trend`
+  schema comment (only "→ 0.0" at the default recovery), and add a `[0.0, 1.0]` bounds
+  check/validator on `SummitFormula.recovery_fraction` so an out-of-range per-team config can't
+  produce a nonsensical (dishonest) reason — both low-priority, non-blocking.
 
 ### Spec Kit workflow (completed steps)
 constitution → specify → clarify → plan → tasks → analyze. The feature spec lives in
@@ -582,6 +634,16 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   ADR 0001) are config-visible product judgments. Review/tune them once the business sees real
   output. When changed, the T021 golden and the coaching-focus example fixture must be
   regenerated together (they move in lockstep).
+- **Labeled assumptions to confirm with the business (Phases 8–9).** All config-only, no engine
+  change to swap:
+  - **Phase 8 — the Summit per-team formula is a PLACEHOLDER** (`Settings.summit_formulas` /
+    `SummitFormula` coefficients). Representative only — the business will supply each team's real
+    Summit / IC-plan logic; the engine never hard-codes a team's numbers.
+  - **Phase 8 — the Summit `recovery_fraction` is an ASSUMPTION to tune** (default **1.0** = full
+    recovery; per-team config, env `COACH_SUMMIT_RECOVERY_FRACTION`). A full recovery may be
+    optimistic — confirm/tune the per-team value with the business.
+  - **Phase 9 — the covariant "success" measure is still TO BE DEFINED** (open question; the
+    covariant analysis is computed against it). Needed before Phase 9 is built.
 - **F6 / F8 superseded → now SATISFIED for the read-only MVP API (Step 5b).** The old
   read-only / read-only-RBD guard tests were recorded as **SUPERSEDED** (region-level roles now
   have full write/action access). For the current **entirely read-only** API they are now met
@@ -639,17 +701,17 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 5** | **Assembly + rubric + API.** **Step 5a** ✅ — the fixed-DAG **orchestrator + brief assembly + 5-section checklist rubric** (T015, T028, T031, T034, T038; ADR 0003). **Step 5b** ✅ — the **read-only FastAPI API** (T014, T016, T025, T037, T040): GET-only, identity→scope-from-config, per-request connection, FR-014 403, PRP-safe, privacy-safe logging | **DONE** (both steps) |
 | **Phase 6** | **UI** (T039) — minimal read-only web page rendering the 5 sections + each reason; seeded-user selector (API enforces scope); per-brand accounts + mismatch; clean 403/empty states; offline demo server | **DONE** |
 | **Phase 7** | **Theme aggregation** (capability #6) — leadership view of themes across reps: **patterns/counts only, never named individuals** (structural + small-cell suppression), **RBAC-scoped** (region/all only; DM rejected), deterministic from the shared signals, LLM wording-only (P7-T1/T2/T3) | **DONE** (no leadership UI yet) |
-| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic, per-team config); the LLM never scores it | **PLANNED** (next) |
-| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (deterministic, not LLM-decided); needs a defined "success" measure | **PLANNED** |
+| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic; per-team **config placeholder** formula + tunable `recovery_fraction`); folded into the normalized rollup, **OFF by default**; the LLM never scores it (P8-T1/T2) | **DONE** (no Summit UI yet) |
+| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (deterministic, not LLM-decided); needs a defined "success" measure | **PLANNED** (next) |
 | **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — **record** the DM's post-ride observations (first **write** path): same door, writer-scope RBAC, PRP-scrubbed on readback (ADR 0002) | **PLANNED** |
 
-> ✅ **MVP FEATURE-COMPLETE (Phases 1–6) + Phase 7 (theme aggregation) DONE.** The morning
-> coaching brief runs end to end (**synthetic data → RBAC/PRP data-access layer → deterministic
-> ranking → the five brief sections → the orchestrated, narrated, validated brief → the read-only
-> API → the read-only web UI**), and the first post-MVP capability (#6, the leadership theme
-> roll-up) is built. `pytest` → **142 passed**. **Phases 8–10 (capabilities #5/#4/#2) are
-> PLANNED**, with **Phase 8 (Summit optimization) the immediate next action**; the OPEN items
-> (§5) are enhancements / next capabilities, **not gaps in the MVP**.
+> ✅ **MVP FEATURE-COMPLETE (Phases 1–6) + Phases 7–8 DONE.** The morning coaching brief runs
+> end to end (**synthetic data → RBAC/PRP data-access layer → deterministic ranking → the five
+> brief sections → the orchestrated, narrated, validated brief → the read-only API → the
+> read-only web UI**), and the first two post-MVP capabilities — #6 (leadership theme roll-up)
+> and #5 (Summit optimization) — are built. `pytest` → **154 passed**. **Phases 9–10
+> (capabilities #4/#2) are PLANNED**, with **Phase 9 (covariant analysis) the immediate next
+> action**; the OPEN items (§5) are enhancements / next capabilities, **not gaps in the MVP**.
 
 ### Diagrams
 
@@ -674,9 +736,10 @@ inline `<svg>` code):
    components (coaching-focus, notes-retriever, ride-along-prep, accounts-context, opener) +
    the **orchestrator + assembly** (`src/coach/orchestrator/`) + the **read-only API**
    (`src/coach/api/app.py`), **audit/logging** (`src/coach/observability/audit.py`), the
-   **web UI** (`web/index.html`), the **offline demo server** (`src/coach/api/demo.py`), and the
-   **Phase 7 theme aggregation** (`src/coach/components/theme_aggregation.py`),
-   and run `uv run pytest -q` to confirm the suite is green (**142 passing**).
+   **web UI** (`web/index.html`), the **offline demo server** (`src/coach/api/demo.py`), the
+   **Phase 7 theme aggregation** (`src/coach/components/theme_aggregation.py`), and the
+   **Phase 8 Summit optimization** (`src/coach/components/summit.py`),
+   and run `uv run pytest -q` to confirm the suite is green (**154 passing**).
 
 **Run it locally:**
 - **Offline demo (no AWS, recommended for a walkthrough):** `uv run uvicorn coach.api.demo:app
@@ -687,17 +750,18 @@ inline `<svg>` code):
   `AWS_REGION` / `BEDROCK_EMBED_MODEL_ID` set and a seeded DB
   (`uv run python -m coach.synthetic.generate`).
 
-**Immediate next action (MVP done; Phase 7 done):**
-1. **Phase 8 — Summit optimization (capability #5)** is the next build: add the **Summit /
-   IC-plan lift** as a new ranking signal, **computed in code** from data + per-team config (a
-   per-team formula) — deterministic and explainable like the four existing signals; the **LLM
-   never scores it** (anti-LLM-ranking guard holds). Configurable per team. *(Open assumption:
-   the per-team Summit formula is a placeholder until the business shares the real logic — §5.)*
-   Phases 9–10 (covariant analysis — computed in code, not LLM-decided; and verbal-feedback /
-   CLOSE — the first **write** path, writer-scope RBAC + PRP-scrubbed on readback per ADR 0002)
-   follow.
-2. **Optional next for Phase 7:** build a **leadership UI view / API endpoint** that surfaces the
-   theme aggregation (the component is done and tested; no screen/route exposes it yet).
+**Immediate next action (MVP done; Phases 7–8 done):**
+1. **Phase 9 — covariant analysis (capability #4)** is the next build: deeper insight in the
+   accounts section — which factors move together with results — **computed in code,
+   deterministic and explainable, NOT LLM-decided** (the LLM only narrates the structured
+   finding); every finding carries a `reason`. **First define the "success" measure** the
+   analysis is computed against — an **open question** that must be settled before building (§5).
+   Phase 10 (verbal-feedback / CLOSE — the first **write** path, writer-scope RBAC + PRP-scrubbed
+   on readback per ADR 0002) follows.
+2. **Optional next for Phases 7–8:** surface the **theme aggregation** (Phase 7) and the **Summit
+   insight** (Phase 8) in a UI / API endpoint — both components are done and tested, but no
+   screen/route exposes them yet. *(Open assumptions to confirm with the business: the Summit
+   per-team placeholder formula and the `recovery_fraction` — §5.)*
 3. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
    and the visible reasons, and use it to gather feedback (and to drive the workshop + the
    config tuning in §5).
