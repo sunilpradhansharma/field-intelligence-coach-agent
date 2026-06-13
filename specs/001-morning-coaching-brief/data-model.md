@@ -223,10 +223,11 @@ Every recommendation carries one of these.
   (FR-002/012/017).
 - `synthetic` MUST be `true` for all MVP data (FR-015).
 
-## Future entities / objects (Phases 7–10) — planned, not in the MVP
+## Post-MVP entities / objects (Phases 7–10) — BUILT
 
-Sketched here only so the rules they MUST keep are recorded; status is in
-[`docs/project-status.md`](../../docs/project-status.md). See *spec.md → Future Capabilities*.
+These were post-MVP and are now **built (Phases 7–10 DONE)**; the rules they keep are recorded
+here; full status is in
+[`docs/project-status.md`](../../docs/project-status.md). See *spec.md → Post-MVP Capabilities*.
 
 - **ThemeAggregate (Phase 7 — capability #6).** An aggregated leadership view of coaching
   themes across reps. It carries **patterns and counts only — never named individual reps or
@@ -234,7 +235,8 @@ Sketched here only so the rules they MUST keep are recorded; status is in
   the **region** / **all** scope levels, each only over **their own region / all regions**.
   A still-deterministic, code-computed roll-up; the LLM may only narrate its `reason`.
 - **CloseRecord (Phase 10 — capability #2).** A post-ride CLOSE note: the DM's observations
-  and agreed development focus (free text, optionally via **Amazon Transcribe** *(planned)*).
+  and agreed development focus (free text, optionally via **Amazon Transcribe** — a seam with a
+  deterministic offline fake in tests).
   It is **written through the same data-access door under the writer's own scope
   (writer-scope RBAC)**, and on **readback** is subject to the **same PRP scrubbing + RBAC** as
   every other coaching note (**ADR 0002**) — a CLOSE note referencing a PRP HCP is never

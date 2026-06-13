@@ -16,7 +16,11 @@ what happened last time, which accounts matter, and how to open the conversation
 
 > **This is a proof of concept (POC), built spec-first, using synthetic data only.**
 > **All ten build phases are complete, and all six original capabilities are built and
-> tested end to end on synthetic data.** `pytest` → **182 passing**. The
+> tested end to end on synthetic data.** `pytest` → **215 passing**. The **web UI now
+> covers all six** — the brief shows **Summit as a 5th ranking contributor** and the
+> **covariant insight** in the Accounts &amp; business section, a **role-gated leadership
+> themes view** (region / all scope only, patterns and counts only), and a **record-close
+> panel** that writes a CLOSE note surfaced in the next brief's ride-along prep. The
 > **architecture and flow diagrams show the complete target system — now fully built**.
 > The assistant only *suggests*; the human (DM or a region-level role) always *decides*.
 >
@@ -72,8 +76,10 @@ this POC to production:
 - **Authentication** — Amazon Cognito.
 - **Production data platform** — Amazon Aurora / Athena (structured) and Amazon Bedrock
   Knowledge Bases / OpenSearch (coaching-notes RAG).
-- **A polished + leadership UI** — a leadership dashboard surfacing the theme aggregation,
-  Summit, and covariant insights. The components are built, but no screen/route exposes them yet.
+- **UI polish & hardening** — the web UI already surfaces all six capabilities (the brief
+  with Summit and the covariant insight, the role-gated leadership themes view, and the
+  record-close panel); the remaining work is richer styling and leadership-dashboard
+  refinements, not new screens.
 - **The deferred performance / latency test** (SC-001), intentionally deferred for the MVP.
 - **The PII guardrail seam** (`src/coach/guardrails/`) is a placeholder, to be wired to
   Amazon Bedrock Guardrails.
@@ -281,7 +287,11 @@ build status, [`docs/project-status.md`](docs/project-status.md) is the source o
 ## Tech stack
 
 - **Language:** Python 3.11+
-- **API:** FastAPI — read-only GET endpoints (`/api/whoami`, `/api/reps`, `/api/brief/{rep_id}`)
+- **API:** FastAPI — `GET /api/whoami`, `GET /api/reps`, `GET /api/brief/{rep_id}`,
+  `GET /api/themes` (leadership-scoped — region / all only, patterns and counts only),
+  `POST /api/brief/{rep_id}/close` (writer-scope RBAC, reusing the single write door), and
+  the `/` web page. The server runs **offline by default** (a deterministic narrator /
+  structurer) and uses Bedrock only when configured.
 - **Orchestration:** LangGraph — an explicit, code-defined DAG (no autonomous agent
   loops), so the flow stays testable and reviewable
 - **LLM:** Claude on **Amazon Bedrock**; the model id is read from configuration, never
@@ -289,7 +299,7 @@ build status, [`docs/project-status.md`](docs/project-status.md) is the source o
 - **Stores (MVP):** SQLite / DuckDB for structured data; an in-memory vector store for the
   coaching-notes RAG (→ FAISS / Chroma / Bedrock Knowledge Bases in production)
 - **Validation:** Pydantic schemas (including the structured `Reason` object)
-- **Tests:** pytest — unit, component, and end-to-end (182 tests)
+- **Tests:** pytest — unit, component, and end-to-end (215 tests)
 - **Tooling:** `uv` for environments/deps; `ruff` for lint + format
 
 ---
@@ -432,7 +442,7 @@ uv sync
 # 2. Generate the seeded synthetic dataset (repeatable; writes ./data/coach.db)
 uv run python -m coach.synthetic.generate --seed 42
 
-# 3. Run the test suite (182 tests)
+# 3. Run the test suite (215 tests)
 uv run pytest
 ```
 
@@ -448,22 +458,22 @@ uv run uvicorn coach.api.demo:app --reload
 # region_r1 / hos_1 to see RBAC scope change; open a rep for the full brief)
 ```
 
-For the production wiring, run the main API with the Bedrock config set
-(`BEDROCK_MODEL_ID`, `AWS_REGION`, `BEDROCK_EMBED_MODEL_ID`) and a seeded DB, then open the
-page:
+The main API runs the same way and is **offline by default with no AWS** (a deterministic
+narrator / structurer). To exercise the production wiring, set the Bedrock config
+(`BEDROCK_MODEL_ID`, `AWS_REGION`, `BEDROCK_EMBED_MODEL_ID`) and it uses Bedrock instead:
 
 ```bash
 uv run uvicorn coach.api.app:app --reload
 # then open http://127.0.0.1:8000/
 ```
 
-Both serve the same read-only page at `/`.
+Both serve the same page at `/`.
 
 ---
 
 ## Roadmap
 
-**All ten phases are done and tested end to end on synthetic data** (`pytest` → **182
+**All ten phases are done and tested end to end on synthetic data** (`pytest` → **215
 passing**). The architecture and flow diagrams above show the *complete target* system — now
 fully built.
 
@@ -488,8 +498,10 @@ this POC to production, behind the same architecture:
 - **Authentication** — Amazon Cognito.
 - **Production data platform** — Amazon Aurora / Athena (structured) and Amazon Bedrock
   Knowledge Bases / OpenSearch (coaching-notes RAG).
-- **A polished + leadership UI** — a leadership dashboard surfacing the theme aggregation,
-  Summit, and covariant insights. The components are built, but no screen/route exposes them yet.
+- **UI polish & hardening** — the web UI already surfaces all six capabilities (the brief
+  with Summit and the covariant insight, the role-gated leadership themes view, and the
+  record-close panel); the remaining work is richer styling and leadership-dashboard
+  refinements, not new screens.
 - **The deferred performance / latency test** (SC-001), intentionally deferred for the MVP.
 - **The PII guardrail seam** (`src/coach/guardrails/`) is a placeholder, to be wired to
   Amazon Bedrock Guardrails.

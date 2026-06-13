@@ -48,8 +48,10 @@ class DataAccess(Protocol):
   - **PRP scrubbing**: HCPs flagged `prp = true` (and their dependent brand-metric /
     call-activity rows) are removed before any result is returned, so no PRP HCP ever
     reaches a field user (FR-020).
-  - This interface exposes **reads only** — no write/mutation methods (Principle I); any
-    future write/action paths for non-rep roles live outside this read seam.
+  - The interface is **reads plus one write** — the Phase 10 CLOSE capture
+    (`save_close_record`) writes through the **same single door** under **writer-scope RBAC**, and
+    the note is read back under the same RBAC + PRP scrubbing (ADR 0002). It records the DM's own
+    input — not an autonomous action (Principle I). No other write/mutation paths exist.
 
 ## Retriever (coaching-notes RAG)
 

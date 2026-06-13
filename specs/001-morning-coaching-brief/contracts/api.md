@@ -1,9 +1,12 @@
 # Contract: HTTP API (FastAPI)
 
-Minimal API the web page calls. All endpoints are **read-only** (Principle I — the
-assistant never acts). Every response is RBAC-scoped to the caller's `AccessContext`
-(Principle V). The brief endpoint returns recommendations that each include a structured
-`reason` (Principle II).
+Minimal API the web page calls. The reads are **read-only**, and there is exactly **one
+write** — the CLOSE capture (`POST /api/brief/{rep_id}/close`), which **records the DM's own
+observations** through the single data-access door; it is not an autonomous action (Principle I —
+the assistant suggests/records; the human decides). Every response is RBAC-scoped to the caller's
+`AccessContext` (Principle V). The brief endpoint returns recommendations that each include a
+structured `reason` (Principle II). The server runs **offline by default** (a deterministic
+narrator/structurer); Bedrock is used only when a model id is configured.
 
 ## Identity (MVP-simulated → Cognito in prod)
 
@@ -89,6 +92,25 @@ Full coaching brief for one rep (sections 2–5 plus the rep's ranking from sect
 ```
 
 - **Empty states**: `ride_along_prep` returns `{ "empty": true, "message": "No prior coaching history yet." }` when the rep has no sessions (FR-018). Sparse data is reported, not fabricated.
+- **Now also in the brief (Phases 8–9):** `ranked_reps[].reason.signals` carries a 5th
+  `summit_opportunity` contributor (capability #5; deterministic, computed in code), and the brief
+  has a `covariant` section (capability #4) — a transparent association with the configured
+  "success" measure noted and an honest insufficient-data state.
+
+### `GET /api/themes`  *(Phase 7 — capability #6)*
+Aggregated coaching themes for a leadership reader — **patterns and counts ONLY, never named
+individuals** (FR-016). **Leadership-scoped:** only `region`/`all` callers; a `district` (DM)
+caller gets the same `403` as out-of-scope (indistinguishable from not-found). `200` returns
+`{ generated_for, rep_count, themes: [ { theme, signal, rep_count, rep_share, suppressed, reason } ], synthetic }`
+(small cells suppressed; each theme carries a narrated `reason`).
+
+### `POST /api/brief/{rep_id}/close`  *(Phase 10 — capability #2; the one write)*
+Records a CLOSE note for an in-scope rep through the **single data-access door** under
+**writer-scope RBAC** (out-of-scope or unknown rep → `403`). Body is either a `transcript` (the
+typed/spoken path — structured offline; `observations` stay the DM's **verbatim** words) or the
+already-structured fields. `200` returns `{ "synthetic": true, "saved": { ...CloseRecord... } }`.
+The saved note flows back through the same scoped + PRP-scrubbed readback (ADR 0002), so it
+appears in the rep's next ride-along prep — and a note tied to a PRP HCP is never surfaced.
 
 ## Cross-cutting contract rules
 - Every `reason` field MUST be present and non-empty on recommendation objects (FR-010).

@@ -39,14 +39,20 @@ read (and, for the write path, every write).
 1. **Roles** — the people the system serves: the **district manager** (own district) and
    **leadership / region-level roles** (their whole region, or all regions). Scope is a
    property of the role, resolved server-side (never chosen by the caller).
-2. **Experience** — the **DM workspace** (the read-only morning-brief web page) and a
-   **leadership dashboard** (an **aggregate-only, RBAC-scoped** cross-rep view showing
-   **patterns and counts only, never named individual reps**; region / all scope only). The
-   theme-aggregation data behind the dashboard is built (`components/theme_aggregation.py`).
+2. **Experience** — one web page with **three surfaces**: the **DM morning brief** (read-only,
+   with Summit and the covariant association visible), a role-gated **leadership themes view**
+   (an **aggregate-only, RBAC-scoped** cross-rep view showing **patterns and counts only, never
+   named individual reps**; region / all scope only;
+   `components/theme_aggregation.py`), and a **record-close panel** that writes a CLOSE note,
+   which then appears in the next brief's ride-along prep.
 3. **API** — a FastAPI service. It resolves the caller's identity into an `AccessContext`
-   (role → scope, from config) and exposes read endpoints for the brief. The **write path** for
-   CLOSE capture is built at the data-access door (`save_close_record`, writer-scope RBAC), so
-   the API surface can read **and** write through the same door.
+   (role → scope, from config) and exposes read endpoints for the brief (`GET /api/whoami`,
+   `GET /api/reps`, `GET /api/brief/{rep_id}`), the leadership-scoped `GET /api/themes`
+   (region / all only — aggregated patterns/counts, never named individuals; a DM gets the same
+   `403` as any out-of-scope caller), and the **one write** `POST /api/brief/{rep_id}/close`,
+   which records the DM's own observations through the **same** single-door write
+   (`save_close_record`, writer-scope RBAC — not a second path), so the API surface reads
+   **and** writes through the one door.
 4. **Orchestration** — a fixed, in-code **LangGraph DAG** (no autonomous loops) that runs the
    builders in a deterministic order, assembles the brief, and enforces **narrate-before-expose**
    (Section 5).
@@ -63,12 +69,19 @@ read (and, for the write path, every write).
    **Amazon Transcribe** for verbal feedback (`llm/transcribe.py` — a deterministic offline fake
    for tests), and **CLOSE capture** of post-ride observations (`components/close_capture.py` —
    the assistant **records** the human's input, it does not act; the observations are the DM's
-   verbatim transcript, which the LLM never alters).
+   verbatim transcript, which the LLM never alters). A single factory (`make_llm` / `make_embedder`
+   in `llm/factory.py`, plus an `OfflineLLM`) picks the real Bedrock provider **iff** a model id
+   is configured (`BEDROCK_MODEL_ID` / `BEDROCK_EMBED_MODEL_ID`), otherwise a **deterministic
+   offline narrator / embedder** — so the server runs fully offline by default with no AWS and no
+   error.
 8. **Data-access door** — the single `DataAccess` / `Retriever` seam. **RBAC and PRP scrubbing
    are enforced here on every read** (and every write), so no component can widen scope or see
    a PRP HCP. This is the only layer that talks to the stores.
 9. **Stores** — a structured store (SQLite/DuckDB → Aurora/Athena) and a coaching-notes vector
-   store (in-memory/FAISS/Chroma → Bedrock Knowledge Bases / OpenSearch).
+   store (in-memory/FAISS/Chroma → Bedrock Knowledge Bases / OpenSearch). The SQLite store stamps
+   a schema version (`PRAGMA user_version = SCHEMA_VERSION`) on generation, and the API verifies it
+   at startup, so a stale on-disk DB **fails fast** with a clear "regenerate" message instead of a
+   cryptic error.
 10. **Data sources** — where real data would originate (Veeva, IQVIA, Summit, etc.); the MVP
     uses a seeded **synthetic** generator only, behind the same interface.
 11. **Cross-cutting** — **config** (model id, weights, thresholds — never hard-coded), the
@@ -97,12 +110,17 @@ build status see [`docs/project-status.md`](project-status.md) (the single sourc
   **computed in code** from data + per-team config (a per-team formula), normalized 0..1 via the
   config cap and weighted like the four existing signals (`components/summit.py`, folded into
   `components/ranking.py`) — deterministic and explainable; **the LLM never scores it**. It is
-  **off by default** (zero weight), so the four-signal MVP ranking is unchanged unless enabled.
-- **Capability #4 — covariant analysis:** deeper insight in the accounts section — which
-  factors move together with results (`components/covariant.py`) — **computed in code,
-  deterministic and explainable, not LLM-decided** (the LLM only narrates the structured
-  finding). It is a transparent counts/rates/lift association against a config-defined "success"
-  measure; thin data returns a clear insufficient-data state, never a fabricated finding.
+  **enabled by default**: folded into the normalized ranking rollup with a non-zero default
+  weight (**0.2**, tunable via config/env `COACH_WEIGHT_SUMMIT`), so every rep's Priority
+  `Reason` carries a fifth ranking contributor, `summit_opportunity`. It can still be turned off
+  by setting that weight to **0** (config controls it). The per-team Summit formula and
+  `recovery_fraction` remain clearly-labeled placeholder **assumptions**.
+- **Capability #4 — covariant analysis:** deeper insight surfaced in the brief's **accounts &
+  business section** — a transparent association line for which factors move together with results
+  (`components/covariant.py`) — **computed in code, deterministic and explainable, not
+  LLM-decided** (the LLM only narrates the structured finding). It is a transparent
+  counts/rates/lift association against the configured "success" measure (itself a labeled
+  **assumption**); thin data returns a clear insufficient-data state, never a fabricated finding.
 - **Capability #2 — verbal feedback / CLOSE:** **record** the DM's post-ride observations
   (**Amazon Transcribe** voice capture + a CLOSE note; `llm/transcribe.py`,
   `components/close_capture.py`) — the assistant records the human's input, it does not act. The
@@ -159,7 +177,7 @@ All packages live under `src/coach/`. (For build status see
 | `components` | The 5 brief builders (ranking, coaching focus, ride-along prep, accounts/context, opener) + the shared signals helper, plus the intelligence builders (Summit, covariant, theme aggregation) and CLOSE capture | `components/ranking.py`, `signals.py`, `coaching_focus.py`, `ride_along_prep.py`, `accounts_context.py`, `opener.py`, `summit.py`, `covariant.py`, `theme_aggregation.py`, `close_capture.py` |
 | `orchestrator` | The fixed LangGraph DAG + brief assembly (narrate-before-expose guard + the 5-section rubric) | `orchestrator/brief_graph.py`, `assembly.py` |
 | `observability` | Privacy-safe per-brief audit records + field-level data classification (no out-of-scope data or raw PII in logs) | `observability/audit.py` |
-| `api` | The read-only FastAPI app (identity → `AccessContext`, GET brief endpoints, serves the UI) + an offline demo server | `api/app.py`, `demo.py` |
+| `api` | The FastAPI app (identity → `AccessContext`; `GET /api/whoami`, `GET /api/reps`, `GET /api/brief/{rep_id}`, leadership-scoped `GET /api/themes`, and the one write `POST /api/brief/{rep_id}/close`; serves the read-only web page at `/`) + an offline demo server | `api/app.py`, `demo.py` |
 | `guardrails` | A PII guardrail seam (planned pass-through → Amazon Bedrock Guardrails) | `guardrails/` *(seam, future enhancement)* |
 
 ---

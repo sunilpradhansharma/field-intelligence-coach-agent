@@ -28,9 +28,9 @@ MVP = the "morning coaching brief" (5 sections). See
   Bedrock Knowledge Bases / OpenSearch in production.
 - Tests: pytest.
 
-## Commands (target — wire these as the code is scaffolded)
+## Commands (all wired; Phases 1–10 built)
 - Install deps:        `uv sync`
-- Run the API:         `uvicorn coach.api.app:app --reload`
+- Run the API:         `uvicorn coach.api.app:app --reload`  (runs offline by default; Bedrock only when configured)
 - Run tests:           `pytest`
 - Lint and format:     `ruff check --fix . && ruff format .`
 - Generate fake data:  use the `/gen-synthetic-data` skill

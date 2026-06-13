@@ -4,7 +4,7 @@
 > full context. Sections are split into **BUILT** (in the repo now), **DECIDED**
 > (confirmed by the stakeholder), and **OPEN** (still pending). Keep it current.
 >
-> Last updated: 2026-06-10.
+> Last updated: 2026-06-12.
 
 ---
 
@@ -31,8 +31,8 @@ RBAC/PRP data-access layer → deterministic ranking → the five brief sections
 narrated, validated brief → the read-only API → the read-only web UI), and the four post-MVP
 capabilities are built: **#6 theme aggregation (Phase 7), #5 Summit optimization (Phase 8),
 #4 covariant analysis (Phase 9), and #2 verbal feedback / CLOSE capture (Phase 10 — both Step 10a
-the text write path AND Step 10b voice capture)**. `pytest` → **182 passed**. What remains is
-**productionization** (real data connectors, auth, a polished + leadership UI) and confirming the
+the text write path AND Step 10b voice capture)**. `pytest` → **215 passed**. What remains is
+**productionization** (real data connectors, auth, UI polish/hardening) and confirming the
 labeled assumptions with the business — not new capabilities (§5, §7).
 
 **All six original capabilities, end to end:** (1) prioritize who to ride with + **why**;
@@ -274,11 +274,15 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
 
 **Step 5b — read-only FastAPI API — tasks T014, T016, T025, T037, T040 — DONE**
 (`src/coach/api/app.py` + `src/coach/observability/audit.py`, FR-001/FR-011/FR-013/FR-014/FR-016):
-- **Read-only (GET-only) surface over the orchestrator** — three endpoints, all `GET`:
+- **Read surface over the orchestrator** — the reads are all `GET`:
   `GET /api/whoami` (the resolved role + scope), `GET /api/reps?limit=N` (section 1, ranked +
-  narrated), `GET /api/brief/{rep_id}` (the full five-section brief via `build_brief`). There is
-  **no POST/PUT/PATCH/DELETE or any write/action/mutation path** anywhere — the brief is pure
-  suggestion data (FR-011). A test walks `app.routes` and fails if any non-GET verb appears.
+  narrated), `GET /api/brief/{rep_id}` (the full five-section brief via `build_brief`), plus the
+  served `/` page. The brief itself is pure suggestion data (FR-011) — no action/mutation path.
+  Two capability routes were added (both RBAC-enforced at the data-access layer):
+  **`GET /api/themes`** (leadership-scoped — region/all only; a DM gets the same `403` as any
+  out-of-scope caller; patterns/counts only, never named individuals), and the **one API write**,
+  **`POST /api/brief/{rep_id}/close`** (writer-scope RBAC, reuses the single-door
+  `save_close_record`; the observations are the DM's verbatim words). There is no other write path.
 - **Identity → role → `AccessContext`, server-side** — the `X-User-Id` header is resolved to a
   `User` via the data-access layer (`SqliteStore.get_user`), and the **`scope_level` is derived
   from the role through the single config source** (`ROLE_SCOPE_LEVELS` / `scope_level_for`). The
@@ -310,13 +314,23 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
 - **Offline-testable, config-driven** — the LLM + embeddings are injected via `AppDeps`, so tests
   run fully offline with fakes; production uses Bedrock behind a lazy seam (model id from config,
   never hard-coded), and `app = create_app()` imports without AWS credentials.
+- **Offline-vs-Bedrock factory** (`src/coach/llm/factory.py` — `make_llm` / `make_embedder` /
+  `OfflineLLM`) — the server runs **FULLY OFFLINE by default** (a deterministic narrator + embedder)
+  and uses **Bedrock only when a model id is configured** (model id from config, never hard-coded).
+- **Schema-version guard** — the SQLite store stamps `PRAGMA user_version = SCHEMA_VERSION` on
+  generation and the API **verifies it at startup**, so a stale on-disk DB **fails fast** with a
+  clear "regenerate with `--seed 42`" message rather than serving against an incompatible schema.
 
 ### Phase 6 (COMPLETE) — the read-only web UI — task T039
 (`web/index.html`, served at `GET /` by `src/coach/api/app.py`; FR-010/FR-011/FR-014/FR-018):
-- **A minimal, read-only single page** — vanilla HTML/CSS/JS (no framework), served same-origin
-  by the FastAPI app so it shares the GET API with no CORS. It calls **only the GET endpoints**
-  (`/api/whoami`, `/api/reps`, `/api/brief/{rep_id}`) — **no write/action/mutation control of any
-  kind** (FR-011, suggestion-only). The whole app surface stays GET-only (enforced by a test).
+- **A minimal single page** — vanilla HTML/CSS/JS (no framework), served same-origin
+  by the FastAPI app so it shares the API with no CORS. The morning brief is read-only
+  (suggestion-only, FR-011); the page now also surfaces the post-MVP capabilities and the one
+  write panel (below). The served page at "/" includes (a) the **morning brief with Summit as a
+  5th ranking contributor** (`summit_opportunity`) and the **covariant insight in the Accounts &
+  business section**; (b) a **role-gated "Leadership themes" view** (region/all only — patterns
+  and counts only, never named individuals); and (c) a **"Record close" panel** that writes a
+  CLOSE note appearing in the next brief's ride-along prep.
 - **The viewer acts as a seeded user, not a scope** — a selector of `dm_d1` / `dm_d2` /
   `region_r1` / `hos_1` sets the `X-User-Id`; the **API derives role → scope** and enforces it.
   The UI never sets or widens scope; a scope chip shows the role + territory from `/api/whoami`.
@@ -374,9 +388,9 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   config; FakeLLM in tests; no live Bedrock.
 - **Explainability.** Every theme carries a structured `reason` with its supporting counts
   (FR-010). New schemas `Theme` + `ThemeAggregate`; `Settings.aggregation_min_cell`.
-- **Not built yet (optional next):** a **leadership UI view** that renders these themes (the API
-  endpoint + dashboard) — the aggregation component is done and tested, but no screen/route
-  surfaces it yet.
+- **Surfaced in the UI + API.** A **role-gated "Leadership themes" view** on the served `/` page
+  (region/all only — patterns/counts only, never named individuals) renders these themes, backed by
+  **`GET /api/themes`** (leadership-scoped; a DM gets the same `403` as any out-of-scope caller).
 
 ### Phase 8 (COMPLETE) — Summit optimization (capability #5) — tasks P8-T1, P8-T2
 (`src/coach/components/summit.py`, FR-002/FR-012/FR-013/FR-020; ADR 0001):
@@ -397,9 +411,11 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
 - **Integrated as a normalized signal in the shared rollup (ADR 0001).** `ranking.py::_apply_summit`
   folds the lift in via the SAME mechanism as the four core signals — raw = lift, normalized 0..1
   via the config cap, contribution = normalized × the config weight — so config weights stay
-  meaningful (no parallel scoring path). **OFF by default** (`ranking_weights["summit_opportunity"]`
-  = 0.0), so the four-signal MVP ranking, the golden, and the brief are unchanged unless Summit is
-  configured on.
+  meaningful (no parallel scoring path). **ENABLED by default** with a non-zero weight
+  (`ranking_weights["summit_opportunity"]` = **0.2**, tunable via config / env
+  `COACH_WEIGHT_SUMMIT`; can still be set to **0** to turn it off), so Summit shows as a **5th
+  ranking contributor** (`summit_opportunity`) in every rep's Priority reason. The per-team formula
+  and `recovery_fraction` remain labeled placeholder assumptions to confirm.
 - **A reason on every Summit insight (FR-010).** Each `SummitInsight` carries a structured reason
   with the targeted **(account, brand) movements** (current → projected trend, decline reduced) and
   the **estimated ranking change** (baseline → projected position, lift), with the raw numbers.
@@ -409,8 +425,9 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   scope + PRP scrubbing hold — PRP rows never enter the aggregation or targets). New schemas
   `SummitInsight` + `SummitTarget`, `SignalName.summit_opportunity`; config `SummitFormula` +
   `summit_formulas` + `summit_max_targets` + the Summit weight/cap.
-- **Not built yet (optional next):** surfacing the Summit insight in the brief/API/UI — the
-  component + signal integration are done and tested, but no screen/route shows it yet.
+- **Surfaced in the brief + UI.** Summit is folded into the normalized ranking rollup with a
+  non-zero default weight and shows as a **5th contributor (`summit_opportunity`)** in every rep's
+  Priority reason on the served `/` page.
 
 ### Phase 9 (COMPLETE) — covariant analysis (capability #4) — tasks P9-T1, P9-T2, P9-T3
 (`src/coach/components/covariant.py`, FR-002/FR-010/FR-012/FR-018; ADR 0001-style transparency):
@@ -439,7 +456,8 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   layer** (reusing `compute_rep_signals`; RBAC + PRP hold — PRP rows never enter the analysis).
   New schemas `CovariantAnalysis` / `CovariantVariableFinding` / `CovariantBlend`; config
   `SuccessMeasure` + the covariant thresholds.
-- **Not built yet (optional next):** wiring the covariant insight into the live brief/API/UI.
+- **Surfaced in the brief + UI.** The covariant insight is wired into the live brief and renders
+  in the **Accounts & business section** on the served `/` page.
 
 ### Phase 10 (COMPLETE) — verbal feedback / CLOSE capture (capability #2)
 **Step 10a — the CLOSE write path (text) — tasks P10-T1…P10-T4 — DONE**
@@ -574,9 +592,9 @@ Step 10a):
 - `tests/component/test_summit.py` (**P8-T1/T2**, 12 tests) — Phase 8: deterministic Summit
   scores + the **what-if lift** (lifts 2/1/0 on a 3-district set) and determinism; **per-team
   config-driven** (identical inputs + different configured formulas → different scores) and the
-  formula scaling scores predictably; **rollup integration** (OFF by default; with a non-zero
-  weight the Summit signal folds in via the normalized rollup — `total_score` = four-signal score
-  + normalized contribution); **explainability** (lift + targets with raw numbers); the **anti-LLM
+  formula scaling scores predictably; **rollup integration** (the Summit signal folds in via the
+  normalized rollup — `total_score` = four-signal score + normalized contribution; a zero weight
+  turns it off); **explainability** (lift + targets with raw numbers); the **anti-LLM
   guard**; **RBAC + PRP** (PRP rows scrubbed; a DM aggregates only their own district); and the
   **`recovery_fraction`** hardening (default 1.0 preserves prior behavior; a different value
   changes the lift predictably; two teams with different recovery → different results).
@@ -620,7 +638,7 @@ Step 10a):
   wording-only; reads only through the data-access layer. Phase 8: per-team Summit formula
   config-driven + labeled placeholder, no hard-coded numbers; the what-if lift computed
   deterministically in code, not LLM-decided; integrated via the normalized rollup so weights stay
-  meaningful, OFF by default; `recovery_fraction` a tunable per-team config with default 1.0
+  meaningful, enabled by default (weight 0.2, tunable; 0 turns it off); `recovery_fraction` a tunable per-team config with default 1.0
   preserving prior behavior; reads only through the data-access layer (RBAC + PRP); anti-LLM guard
   present) — (Principle V scope levels + scope-from-config,
   caller cannot choose scope; Principle IV PRP scrubbing — reused helpers, not a bypass, unaffected
@@ -824,10 +842,11 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
     unchanged); replaces the synthetic generator.
   - **Real authentication** — Amazon Cognito → `AccessContext` (the API already resolves identity →
     role → scope from config; swap the `X-User-Id` stub for real authn).
-  - **A polished UI + the leadership UI view** — render the brief richly, and add the
-    **leadership dashboard / API endpoint** that surfaces the Phase 7 themes, Phase 8 Summit
-    insight, and Phase 9 covariant analysis (the components are built and tested; no screen/route
-    exposes them yet).
+  - **UI polish + hardening** — the served `/` page already surfaces the brief (with Summit as a
+    5th contributor and the covariant insight in the Accounts & business section), the role-gated
+    leadership themes view, and the Record-close panel (backed by `GET /api/themes` and
+    `POST /api/brief/{rep_id}/close`); productionization is richer rendering + hardening, not a new
+    screen.
   - **Optional hardening from the reviews** — CLOSE `save` audit semantics (the `INSERT OR REPLACE`
     overwrite-by-id), a mocked integration test for the real `AmazonTranscribe` path, and a
     layer-level PRP filter on `get_coaching_sessions` (today PRP on the structured fields is
@@ -845,9 +864,9 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 4** | The **five brief sections**: (1) coaching focus ✅ T026/T027; (2) ride-along prep ✅ (T010/T011 + T029/T030); (3) accounts + per-brand context ✅ T032/T033; (4) opener ✅ T035/T036 | **DONE** (all five sections) |
 | **Phase 5** | **Assembly + rubric + API.** **Step 5a** ✅ — the fixed-DAG **orchestrator + brief assembly + 5-section checklist rubric** (T015, T028, T031, T034, T038; ADR 0003). **Step 5b** ✅ — the **read-only FastAPI API** (T014, T016, T025, T037, T040): GET-only, identity→scope-from-config, per-request connection, FR-014 403, PRP-safe, privacy-safe logging | **DONE** (both steps) |
 | **Phase 6** | **UI** (T039) — minimal read-only web page rendering the 5 sections + each reason; seeded-user selector (API enforces scope); per-brand accounts + mismatch; clean 403/empty states; offline demo server | **DONE** |
-| **Phase 7** | **Theme aggregation** (capability #6) — leadership view of themes across reps: **patterns/counts only, never named individuals** (structural + small-cell suppression), **RBAC-scoped** (region/all only; DM rejected), deterministic from the shared signals, LLM wording-only (P7-T1/T2/T3) | **DONE** (no leadership UI yet) |
-| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic; per-team **config placeholder** formula + tunable `recovery_fraction`); folded into the normalized rollup, **OFF by default**; the LLM never scores it (P8-T1/T2) | **DONE** (no Summit UI yet) |
-| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (transparent counts/rates/lift, not a black-box model, not LLM-decided); **config-driven** success measure (labeled assumption); thin data handled honestly; reads through the single door (P9-T1/T2/T3) | **DONE** (no covariant UI yet) |
+| **Phase 7** | **Theme aggregation** (capability #6) — leadership view of themes across reps: **patterns/counts only, never named individuals** (structural + small-cell suppression), **RBAC-scoped** (region/all only; DM rejected), deterministic from the shared signals, LLM wording-only (P7-T1/T2/T3) | **DONE** (role-gated leadership themes view on `/`, backed by `GET /api/themes`) |
+| **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic; per-team **config placeholder** formula + tunable `recovery_fraction`); folded into the normalized rollup, **enabled by default** (weight 0.2, tunable via `COACH_WEIGHT_SUMMIT`; 0 turns it off); the LLM never scores it (P8-T1/T2) | **DONE** (5th `summit_opportunity` contributor in every brief's Priority reason on `/`) |
+| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (transparent counts/rates/lift, not a black-box model, not LLM-decided); **config-driven** success measure (labeled assumption); thin data handled honestly; reads through the single door (P9-T1/T2/T3) | **DONE** (covariant insight in the Accounts & business section on `/`) |
 | **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2). **Step 10a** ✅ — the text **CLOSE write path** (P10-T1…T4): first WRITE through the single door, writer-scope RBAC (out-of-scope rejected like not-found), the loop closes into the next ride-along prep, **full PRP scrub on readback** (structured fields + free text; ADR 0002), collision-free ids, records the DM's input verbatim. **Step 10b** ✅ — **voice capture** (P10-T5): `Transcriber` seam (lazy Amazon Transcribe + fake, no live AWS); Claude structures only the DM's stated items (observations verbatim, never invents); reviewable draft; saving reuses the 10a door | **DONE** (both steps) |
 
 > ✅ **ROADMAP COMPLETE — Phases 1–10 DONE. ALL SIX original capabilities are built end to end.**
@@ -855,9 +874,9 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 > deterministic ranking → the five brief sections → the orchestrated, narrated, validated brief →
 > the read-only API → the read-only web UI**), plus the four post-MVP capabilities: **#6 theme
 > aggregation (Phase 7), #5 Summit optimization (Phase 8), #4 covariant analysis (Phase 9), and #2
-> verbal feedback / CLOSE capture (Phase 10 — text write path + voice)**. `pytest` → **182
-> passed**. What remains is **productionization** (real data connectors, auth, a polished +
-> leadership UI) and confirming the labeled assumptions with the business — **not new
+> verbal feedback / CLOSE capture (Phase 10 — text write path + voice)**. `pytest` → **215
+> passed**. What remains is **productionization** (real data connectors, auth, UI polish/hardening)
+> and confirming the labeled assumptions with the business — **not new
 > capabilities** (§5, §7).
 
 ### Diagrams
@@ -888,7 +907,7 @@ inline `<svg>` code):
    **Phase 9 covariant** (`covariant.py`), and **Phase 10 CLOSE capture** — the write path
    (`DataAccess.save_close_record` + `CloseRecord`) and voice (`llm/transcribe.py` +
    `components/close_capture.py`),
-   and run `uv run pytest -q` to confirm the suite is green (**182 passing**).
+   and run `uv run pytest -q` to confirm the suite is green (**215 passing**).
 
 **Run it locally:**
 - **Offline demo (no AWS, recommended for a walkthrough):** `uv run uvicorn coach.api.demo:app
@@ -907,9 +926,10 @@ pending). The remaining work is productionization + confirming assumptions (§5)
 2. **Productionize behind the existing interfaces** (none is a new capability): **real data-source
    connectors** (Veeva / IQVIA / Summit / Aurora / Athena / Bedrock Knowledge Bases behind the same
    `DataAccess` / `Retriever` door — RBAC + PRP unchanged), **real auth** (Cognito → `AccessContext`),
-   and a **polished UI + the leadership UI view / API endpoint** that surfaces the Phase 7 themes,
-   Phase 8 Summit insight, and Phase 9 covariant analysis (components done; no screen/route shows
-   them yet). Plus the optional review hardening (CLOSE `save` audit semantics; a mocked
+   and **UI polish + hardening** (the served `/` page already surfaces the Phase 7 themes via the
+   role-gated leadership view + `GET /api/themes`, the Phase 8 Summit insight as a 5th brief
+   contributor, the Phase 9 covariant analysis in the Accounts & business section, and the Record-
+   close panel via `POST /api/brief/{rep_id}/close`). Plus the optional review hardening (CLOSE `save` audit semantics; a mocked
    `AmazonTranscribe` integration test; a layer-level PRP filter on `get_coaching_sessions`).
 3. **Prepare the demo for the business** — run the offline demo (above), walk the brief + the
    visible reasons (and the voice CLOSE loop), and gather feedback to drive #1.

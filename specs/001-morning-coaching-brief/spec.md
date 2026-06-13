@@ -332,24 +332,24 @@ suggested opener appears that references the rep's specific situation.
 
 ## Out of Scope (MVP)
 
-Out of scope for the **MVP (Phases 1–6)**. Three of these are now **planned as post-MVP
-capabilities** — see *Future Capabilities (Phases 7–10)* below for their scope and the rules
-they must keep:
+Out of scope for the **MVP (Phases 1–6)**. Three of these were post-MVP capabilities and are
+now **BUILT (Phases 7–10 DONE)** — see *Post-MVP Capabilities (Phases 7–10)* below for their
+scope and the rules they keep:
 
-- Summit ranking optimization. *(Planned — Phase 8.)*
+- Summit ranking optimization. *(Built — Phase 8.)*
 - Aggregating coaching themes across districts, regions, or nationally for leadership.
-  *(Planned — Phase 7, as a **scoped, aggregate-only** leadership view: patterns and counts
+  *(Built — Phase 7, as a **scoped, aggregate-only** leadership view: patterns and counts
   only, never named individuals.)*
-- Capturing new notes by voice during or after the ride. *(Planned — Phase 10.)*
+- Capturing new notes by voice during or after the ride. *(Built — Phase 10.)*
 - Connecting to any real or live data source (Veeva, IQVIA, AEBAT — the strategic /
   speaker-program spend reporting tool, Summit, etc.). *(Remains out of scope — synthetic-only.)*
 - Workflows for secondary users (reps, marketing/sales leadership, training, APEX — the
   internal analytics support team). *(Remains out of scope.)*
 
-## Future Capabilities (Phases 7–10) — planned, post-MVP
+## Post-MVP Capabilities (Phases 7–10) — BUILT
 
-These extend the **same architecture** as the MVP and are **not yet built** (status:
-[`docs/project-status.md`](../../docs/project-status.md)). Every one keeps the constitution
+These extend the **same architecture** as the MVP and are **now built** (Phases 7–10 DONE;
+status detail: [`docs/project-status.md`](../../docs/project-status.md)). Every one keeps the constitution
 rules intact: **deterministic logic is computed in code; the LLM only narrates wording (never
 decides ranks, scores, or analysis); all reads AND writes go through the single data-access
 door with RBAC scope + PRP scrubbing enforced there; every recommendation carries a visible
@@ -369,9 +369,11 @@ door with RBAC scope + PRP scrubbing enforced there; every recommendation carrie
 - **Phase 9 — covariant analysis (capability #4).** Deeper insight in the accounts section —
   which factors move together with results. The analysis is **computed in code and is
   deterministic/explainable, NOT LLM-decided**; the LLM may only narrate the resulting
-  structured finding. *Open question:* it needs a defined **"success" measure** first.
+  structured finding. The **"success" measure** ships as a clearly-labeled config DEFAULT
+  ASSUMPTION to confirm with the business (it is not hard-coded), and the insight is surfaced in
+  the brief's accounts section with an honest insufficient-data state.
 - **Phase 10 — verbal feedback / CLOSE capture (capability #2).** Capture post-ride
-  observations using **Amazon Transcribe (planned)** + a CLOSE record. The assistant **records
+  observations using **Amazon Transcribe** (a seam; a deterministic offline fake in tests) + a CLOSE record. The assistant **records
   the human's (the DM's) input — it does not act or auto-generate a plan** (suggestion-only
   holds). This is the **first write path**: writes go through the **same single data-access
   door** under the **writer's own scope (writer-scope RBAC)**, and the transcribed free-text

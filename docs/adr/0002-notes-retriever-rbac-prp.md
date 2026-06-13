@@ -1,6 +1,7 @@
 # ADR 0002: The notes retriever enforces RBAC and PRP at query time
 
-**Status:** Accepted
+**Status:** Accepted — implemented and in effect (Phase 4 ride-along prep; also governs the
+Phase 10 CLOSE-note readback, so a captured note tied to a PRP HCP is never surfaced).
 
 ## Context
 

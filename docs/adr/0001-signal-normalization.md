@@ -1,6 +1,7 @@
 # ADR 0001: Normalize ranking signals before weighting
 
-**Status:** Accepted
+**Status:** Accepted — implemented and in effect (Phase 3, the deterministic ranking; the same
+normalized rollup now also folds in the Phase 8 Summit signal).
 
 ## Context
 

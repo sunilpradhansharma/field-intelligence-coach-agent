@@ -1,6 +1,7 @@
 # ADR 0003: Fixed-graph orchestration; narrate before expose
 
-**Status:** Accepted
+**Status:** Accepted — implemented and in effect (Phase 5 LangGraph orchestrator; the
+narrate-before-expose guard is re-checked at the API boundary).
 
 ## Context
 
