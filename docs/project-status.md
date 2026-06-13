@@ -660,10 +660,11 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 ## 3. Decisions log — DECIDED
 
 - **MVP = the morning coaching brief** (capabilities 1–4: who to ride with + why; what to
-  coach; what happened last time; accounts/HCPs + business context; plus the opener).
-  **Out of scope for the MVP:** Summit ranking optimization (planned Phase 8) and aggregating
-  coaching themes for leadership (planned Phase 7 — a **scoped, aggregate-only** view:
-  patterns and counts only, never named individuals; region/all scope only).
+  coach; what happened last time; accounts/HCPs + business context; plus the opener). The
+  capabilities that were originally *out of scope for the MVP* are now **built post-MVP**:
+  Summit ranking optimization (**Phase 8 — DONE**) and aggregating coaching themes for leadership
+  (**Phase 7 — DONE** — a **scoped, aggregate-only** view: patterns and counts only, never named
+  individuals; region/all scope only).
 - **Clarify answers** (Session 2026-06-07):
   - Ranking uses the **four named signals** — declining share, low call activity in key
     accounts, missed coaching follow-up, business opportunity/risk — with **transparent,
@@ -805,6 +806,17 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   ride-along-prep RAG over real-shaped notes.
 - **Performance / latency test (SC-001)** is **deferred for the MVP** (no perf test task
   in scope; recorded in `tasks.md` as deferred check "C2").
+- **A few originally-scoped foundational tasks are still unchecked in `tasks.md` (none is a
+  capability).** **T013** — the PII guardrail seam — ships today as a placeholder package
+  (`src/coach/guardrails/__init__.py`); its pass-through `pii.py` and the Bedrock Guardrails
+  wiring are future work (see *Productionization* below). **T041** (a dedicated
+  `tests/e2e/test_synthetic_only.py`) and **T042** (a named `tests/e2e/test_quickstart.py` for
+  quickstart scenarios A–D) are not yet written as standalone files — their behaviour is
+  already exercised, though: the synthetic-only rule by the commit-time hook plus
+  `GenerationMeta(synthetic=true)`, and the quickstart scenarios by the existing RBAC, rubric,
+  and determinism-golden e2e tests. Separately, **T007A** and **T012** are **built** (the
+  `Brand` enum and the `BedrockLLM` wrapper both exist in the repo) but their checkboxes in
+  `tasks.md` are stale and should be ticked.
 - **Productionization (future work, beyond the six capabilities).** None changes a capability;
   each swaps a synthetic/MVP piece for a managed one behind the existing interfaces:
   - **Real data-source connectors** — Veeva / IQVIA / Summit / Aurora / Athena / Bedrock

@@ -12,49 +12,71 @@ what happened last time, which accounts matter, and how to open the conversation
 
 ---
 
-## MVP scope
+## Status
 
 > **This is a proof of concept (POC), built spec-first, using synthetic data only.**
-> **The MVP — the morning coaching brief — is built and tested end to end (all six phases):**
-> synthetic data → the RBAC/PRP data-access layer → the deterministic ranking → the five brief
-> sections → the orchestrated, narrated, validated brief → the read-only API → the minimal web
-> UI. `pytest` → **129 passing**. The **architecture and flow diagrams show the complete target
-> system**; the [Roadmap](#roadmap) below shows **what is built today versus planned next**
-> (theme aggregation, Summit optimization, covariant analysis, and verbal-feedback / CLOSE
-> capture are planned capabilities, not MVP gaps).
+> **All ten build phases are complete, and all six original capabilities are built and
+> tested end to end on synthetic data.** `pytest` → **182 passing**. The
+> **architecture and flow diagrams show the complete target system — now fully built**.
+> The assistant only *suggests*; the human (DM or a region-level role) always *decides*.
 >
 > 📌 **Living status & open items:** [`docs/project-status.md`](docs/project-status.md) is
 > the project's living memory — the detailed, up-to-date status, decisions, and open items.
 
-### In scope (MVP)
+### The six capabilities (all built and tested)
+
+1. ✅ **Prioritize reps + why** — a ranked list of reps who need attention, each with its reason.
+2. ✅ **Coaching focus + verbal feedback / CLOSE loop** — focus areas for the chosen rep, plus
+   the CLOSE record (text and voice) that closes the OPEN→CLOSE loop.
+3. ✅ **Ride-along prep** — prior notes, agreed actions, and what to observe next.
+4. ✅ **Business outcomes + covariant analysis** — key accounts with per-brand context and a
+   transparent, code-computed covariant association.
+5. ✅ **Summit optimization** — a per-team Summit / IC-plan lift as a deterministic ranking signal.
+6. ✅ **Theme aggregation for leadership** — a scoped, aggregate-only view of common coaching
+   themes (patterns and counts only, never named individuals).
+
+### The morning coaching brief (the MVP) and its five sections
 
 - The **morning coaching brief** and its **five sections**:
   1. **Rep + reason** — a ranked list of reps who need attention, each with its reason.
   2. **Coaching focus** — 1–3 focus areas for the chosen rep, each with its reason.
   3. **Ride-along prep** — prior notes, agreed actions, and what to observe next.
-  4. **Accounts / business context** — key accounts with context (labeled **by brand**)
-     and mismatch flags.
+  4. **Accounts / business context** — key accounts with context (labeled **by brand**),
+     mismatch flags, and the covariant analysis.
   5. **Opener** — a short, editable way to start the morning conversation.
-- This MVP builds the **OPEN** (the morning brief). A second coaching moment, the
-  **CLOSE** (end-of-session observations and development focus), is a **planned** new
-  capability to be specified later.
+- The **OPEN** (the morning brief) and the **CLOSE** (end-of-session observations and
+  development focus — captured by text or by voice) are both built; the loop closes
+  (voice → saved → next ride-along prep).
 - **Primary user: the district manager (DM).** A DM sees **only their own district**. The
   **region-level role has FULL access** (it can take actions, e.g. add notes or flag a
   rep) — it is *not* read-only. The exact role names (**RD**, **RBE**) and the hierarchy
   are **pending confirmation** — see [`docs/project-status.md`](docs/project-status.md).
 
-### Out of scope (MVP / later)
+### Assumptions to confirm
 
-Out of scope for the **MVP (Phases 1–6)**; the first three are **planned post-MVP** (see the
-[Roadmap](#roadmap)):
+A few choices are clearly-labeled assumptions to confirm with the business — none blocks
+the build, each is swappable from config without code change:
 
-- **Summit ranking optimization.** *(Planned — Phase 8.)*
-- **Leadership theme aggregation** across districts or regions. The MVP has **no roll-ups**;
-  roll-ups arrive in **Phase 7** as a **scoped, aggregate-only** leadership view (patterns and
-  counts only, never named individuals; region / all scope only).
-- **Capturing notes by voice** during or after a ride. *(Planned — Phase 10.)*
-- **Any connection to real or live data** (Veeva, IQVIA, **AEBAT** — the strategic /
-  speaker-program spend reporting tool/website, Summit, etc.) — the MVP is synthetic-only.
+- The **Summit placeholder formula** and its per-team **`recovery_fraction`** (default 1.0)
+  are a representative placeholder, to be replaced with the real per-team Summit formula.
+- The covariant analysis's **"success" measure** is a labeled default assumption to confirm.
+- The **RD / RBE** role-name terminology is still pending confirmation.
+
+### Beyond the capabilities (future productionization)
+
+These are **not capability gaps** — every capability is built. They are the steps to take
+this POC to production:
+
+- **Real data connectors** — Veeva, IQVIA, AEBAT, performance dashboards, and Summit files,
+  swapped in behind the same data-access interface.
+- **Authentication** — Amazon Cognito.
+- **Production data platform** — Amazon Aurora / Athena (structured) and Amazon Bedrock
+  Knowledge Bases / OpenSearch (coaching-notes RAG).
+- **A polished + leadership UI** — a leadership dashboard surfacing the theme aggregation,
+  Summit, and covariant insights. The components are built, but no screen/route exposes them yet.
+- **The deferred performance / latency test** (SC-001), intentionally deferred for the MVP.
+- **The PII guardrail seam** (`src/coach/guardrails/`) is a placeholder, to be wired to
+  Amazon Bedrock Guardrails.
 
 ### Success criteria
 
@@ -92,10 +114,10 @@ single brief made of **five sections**:
 5. **A suggested opener** — a short way to start the morning business conversation,
    referencing this rep's specific situation. A suggestion the DM can edit or ignore.
 
-**In scope for the MVP:** these five brief sections, scoped to the user's own territory.
-**Out of scope for the MVP:** Summit ranking optimization (planned Phase 8) and aggregating
-coaching themes for leadership (planned Phase 7 — a **scoped, aggregate-only** view showing
-patterns and counts, never named individuals).
+These five brief sections are scoped to the user's own territory. Beyond the brief, the
+other capabilities are built too: Summit ranking optimization, the covariant analysis, the
+CLOSE capture (text and voice), and a **scoped, aggregate-only** leadership theme view
+showing patterns and counts, never named individuals.
 
 ---
 
@@ -137,8 +159,7 @@ today's fake (synthetic) data for real data later without redoing the work above
 
 ![Complete target architecture for the field intelligence coach](docs/diagrams/architecture.svg)
 
-*Complete target architecture — the full system with every capability. See
-[Roadmap](#roadmap) for what is built today.*
+*Complete target architecture — the full system with every capability, now fully built.*
 
 The **data-access layer is the single door** every part reads and writes through, and it is
 where **RBAC** (scope levels: self / district / region / all) and **PRP scrubbing** are
@@ -201,7 +222,9 @@ The OPEN (morning brief) in plain English:
 **The OPEN morning brief is built and tested end to end** — the data-access layer (RBAC + PRP
 enforced), the deterministic ranking, all five brief builders, the orchestrator, the read-only
 API, and the web UI. The **CLOSE** half of the loop (recording observations after the ride —
-the first write path) is **planned** (Phase 10); see the [Roadmap](#roadmap).
+the first write path, by text or by voice) is **built and tested** too: the write goes through
+the same data-access door under writer-scope RBAC, the readback is PRP-scrubbed, and the loop
+closes (voice → saved → next ride-along prep).
 
 ---
 
@@ -250,9 +273,8 @@ For engineers, a detailed technical reference lives in
 package map under `src/coach/`, the data-access seam (`DataAccess`/`Retriever` Protocols,
 `AccessContext`, `ScopeError`), the data model, the LangGraph orchestration and the
 deterministic ranking, the coaching-notes RAG, LLM integration, the explainability
-contract, security/privacy, and the POC→AWS production mapping. For what is built today
-versus planned next, the [Roadmap](#roadmap) above and
-[`docs/project-status.md`](docs/project-status.md) are the source of truth.
+contract, security/privacy, and the POC→AWS production mapping. For the detailed, living
+build status, [`docs/project-status.md`](docs/project-status.md) is the source of truth.
 
 ---
 
@@ -267,7 +289,7 @@ versus planned next, the [Roadmap](#roadmap) above and
 - **Stores (MVP):** SQLite / DuckDB for structured data; an in-memory vector store for the
   coaching-notes RAG (→ FAISS / Chroma / Bedrock Knowledge Bases in production)
 - **Validation:** Pydantic schemas (including the structured `Reason` object)
-- **Tests:** pytest — unit, component, and end-to-end (129 tests)
+- **Tests:** pytest — unit, component, and end-to-end (182 tests)
 - **Tooling:** `uv` for environments/deps; `ruff` for lint + format
 
 ---
@@ -304,7 +326,12 @@ field-intelligence-coach-agent/
 │   ├── orchestrator/               # BUILT — LangGraph DAG (brief_graph) + assembly + rubric (ADR 0003)
 │   ├── observability/              # BUILT — privacy-safe per-brief audit / logging
 │   ├── api/                        # BUILT — read-only FastAPI app + offline demo server
-│   └── guardrails/                 # placeholder — PII guardrail seam (future enhancement)
+│   ├── components/theme_aggregation.py  # BUILT — scoped, aggregate-only leadership theme roll-up (cap #6)
+│   ├── components/summit.py        # BUILT — per-team Summit lift as a deterministic ranking signal (cap #5)
+│   ├── components/covariant.py     # BUILT — transparent covariant analysis in the accounts section (cap #4)
+│   ├── components/close_capture.py # BUILT — CLOSE capture (text + voice draft) via the write path (cap #2)
+│   ├── llm/transcribe.py           # BUILT — Amazon Transcribe seam (+ offline fake) for voice capture
+│   └── guardrails/                 # placeholder — PII guardrail seam (to wire to Bedrock Guardrails)
 ├── tests/
 │   ├── unit/                       # BUILT — schemas, data-access, RBAC, PRP, ranking (+ golden)
 │   ├── component/                  # BUILT — coaching focus, notes retriever, ride-along, accounts, opener
@@ -405,7 +432,7 @@ uv sync
 # 2. Generate the seeded synthetic dataset (repeatable; writes ./data/coach.db)
 uv run python -m coach.synthetic.generate --seed 42
 
-# 3. Run the test suite (129 tests)
+# 3. Run the test suite (182 tests)
 uv run pytest
 ```
 
@@ -421,31 +448,53 @@ uv run uvicorn coach.api.demo:app --reload
 # region_r1 / hos_1 to see RBAC scope change; open a rep for the full brief)
 ```
 
-For the production wiring, run `uv run uvicorn coach.api.app:app --reload` with the Bedrock
-config set (`BEDROCK_MODEL_ID`, `AWS_REGION`, `BEDROCK_EMBED_MODEL_ID`) and a seeded DB; both
-serve the same read-only page at `/`.
+For the production wiring, run the main API with the Bedrock config set
+(`BEDROCK_MODEL_ID`, `AWS_REGION`, `BEDROCK_EMBED_MODEL_ID`) and a seeded DB, then open the
+page:
+
+```bash
+uv run uvicorn coach.api.app:app --reload
+# then open http://127.0.0.1:8000/
+```
+
+Both serve the same read-only page at `/`.
 
 ---
 
 ## Roadmap
 
-**Phases 1–6 — the morning coaching brief: ✅ Done, tested end to end** (`pytest` → **129
-passing**). **Phases 7–10 — planned next capabilities** (numbered by capability — the next
-steps, not MVP gaps). The architecture and flow diagrams above show the *complete target*
-system; this roadmap shows what is built today versus planned next.
+**All ten phases are done and tested end to end on synthetic data** (`pytest` → **182
+passing**). The architecture and flow diagrams above show the *complete target* system — now
+fully built.
 
 | Phase | Scope | Status |
 |---|---|---|
 | **Phases 1–6** | **The morning coaching brief** — synthetic data → RBAC/PRP data-access → deterministic ranking → the five sections → orchestrated, narrated, validated brief → read-only API → web UI | ✅ **Done** |
-| **Phase 7** | **Theme aggregation** (capability #6) — a leadership view of themes across reps: **patterns and counts only, never named individuals**, and **RBAC-scoped** (region / all only, within their own scope) | ⏳ Planned |
-| **Phase 8** | **Summit optimization** (capability #5) — the Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic, per-team config); the LLM never scores it | ⏳ Planned |
-| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (deterministic, not LLM-decided); needs a defined "success" measure | ⏳ Planned |
-| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — **record** the DM's post-ride observations (the first write path): same door, writer-scope RBAC, PRP-scrubbed on readback | ⏳ Planned |
+| **Phase 7** | **Theme aggregation** (capability #6) — a leadership view of themes across reps: **patterns and counts only, never named individuals**, and **RBAC-scoped** (region / all only, within their own scope); small-cell suppression | ✅ **Done** |
+| **Phase 8** | **Summit optimization** (capability #5) — the Summit / IC-plan lift as a ranking signal **computed in code** (deterministic, per-team config placeholder, swappable); the LLM never scores it | ✅ **Done** |
+| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (deterministic, not LLM-decided), against a config-driven "success" measure; insufficient-data handled honestly | ✅ **Done** |
+| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — **record** the DM's post-ride observations by text or by voice (the first write path): same door, writer-scope RBAC, PRP-scrubbed on readback; the loop closes | ✅ **Done** |
 
-Task IDs for the built phases come straight from `specs/001-morning-coaching-brief/tasks.md`;
+Task IDs for every phase come straight from `specs/001-morning-coaching-brief/tasks.md`;
 the detailed, living build status is in [`docs/project-status.md`](docs/project-status.md).
 
-*The built phases (1–6) in detail:*
+### Beyond the capabilities (future productionization)
+
+These are **not capability gaps** — every capability is built. They are the steps to take
+this POC to production, behind the same architecture:
+
+- **Real data connectors** — swap the synthetic stores for Veeva, IQVIA, AEBAT, performance
+  dashboards, and Summit files behind the same data-access interface.
+- **Authentication** — Amazon Cognito.
+- **Production data platform** — Amazon Aurora / Athena (structured) and Amazon Bedrock
+  Knowledge Bases / OpenSearch (coaching-notes RAG).
+- **A polished + leadership UI** — a leadership dashboard surfacing the theme aggregation,
+  Summit, and covariant insights. The components are built, but no screen/route exposes them yet.
+- **The deferred performance / latency test** (SC-001), intentionally deferred for the MVP.
+- **The PII guardrail seam** (`src/coach/guardrails/`) is a placeholder, to be wired to
+  Amazon Bedrock Guardrails.
+
+*The built phases (1–10) in detail:*
 
 ### Phase 1 — Foundation · STATUS: ✅ Done
 
@@ -527,35 +576,41 @@ and API in Phase 5.)*
 
 ---
 
-### Phases 7–10 (planned) — next capabilities
+### Phases 7–10 — the remaining capabilities · STATUS: ✅ Done
 
-These extend the same architecture (and the complete-target diagram above); none is a gap in
-the morning-brief MVP, and each keeps the same rules: deterministic logic in code, the LLM
-narrating wording only, the single data-access door with RBAC + PRP on reads **and** writes, a
-reason on everything, synthetic-only, and suggestion/record-only.
+These extend the same architecture (and the complete-target diagram above), and each keeps the
+same rules: deterministic logic in code, the LLM narrating/structuring wording only (never
+decisions, never fabrication), the single data-access door with RBAC + PRP on reads **and**
+writes, a reason on everything, synthetic-only, and suggestion/record-only.
 
 - **Phase 7 — theme aggregation (capability #6):** a leadership view of common coaching themes
   across reps. It shows **patterns and counts only — never named individual reps or
-  individually identifiable detail** (FR-016), and is **RBAC-scoped**: only the **region** and
-  **all** scope levels see it, each only across their own region / all regions (a scoped,
-  aggregate-only roll-up behind the same data-access door — not an unscoped one).
-- **Phase 8 — Summit optimization (capability #5):** add the **Summit / IC-plan lift** as a new
-  ranking signal **computed in code** from data + per-team config (a per-team formula) —
-  deterministic and explainable like the four existing signals; **the LLM never scores it** and
-  only narrates wording.
-- **Phase 9 — covariant analysis (capability #4):** deeper insight in the accounts section —
-  which factors move together with results — **computed in code, deterministic and explainable,
-  not LLM-decided** (the LLM only narrates the structured finding); needs a defined "success"
-  measure first.
+  individually identifiable detail** (FR-016, enforced by structural + substring tests), and is
+  **RBAC-scoped**: only the **region** and **all** scope levels see it, each only across their
+  own region / all regions (a DM is rejected). Small-cell suppression uses a config threshold.
+  The themes come from the same shared signals as the per-rep coaching focus, so there is no
+  drift. — `src/coach/components/theme_aggregation.py`.
+- **Phase 8 — Summit optimization (capability #5):** the **Summit / IC-plan lift** as a ranking
+  signal **computed in code** from data + per-team config — deterministic and explainable like
+  the four existing signals; **the LLM never scores it**. The per-team Summit formula lives in
+  config (a representative placeholder, swappable without code change), the what-if ranking lift
+  is computed in code, and it folds in as a normalized ranking signal; `recovery_fraction` is a
+  tunable per-team config (default 1.0). — `src/coach/components/summit.py`.
+- **Phase 9 — covariant analysis (capability #4):** deeper insight in the accounts/business
+  section — which factors move together with results — **computed in code, deterministic and
+  explainable, not a black box, not LLM-decided** (the LLM only narrates the structured
+  finding). The "success" measure is config-driven (a labeled assumption to confirm), and thin
+  data is reported as an honest insufficient-data state, never a fabricated association. —
+  `src/coach/components/covariant.py`.
 - **Phase 10 — verbal feedback / CLOSE capture (capability #2):** **record** the DM's post-ride
-  observations (via **Amazon Transcribe (planned)** + a CLOSE note) — the assistant records the
-  human's input, it does not act. The first **write** path: writes go through the **same door
-  under the writer's own scope (writer-scope RBAC)**, and the free-text notes are **PRP-scrubbed
-  + RBAC-scoped on readback** like every other note (ADR 0002), closing the OPEN→CLOSE loop.
-
-Also planned (cross-cutting, not numbered capabilities): **real data-source connectors** (swap
-the synthetic stores for Veeva / IQVIA / Aurora / Athena / Bedrock Knowledge Bases behind the
-same data-access interface) and a **performance / latency test** (SC-001, deferred for the MVP).
+  observations by **text or by voice** — the assistant records the human's input, it does not
+  act. The first **write** path goes through the **same door under the writer's own scope
+  (writer-scope RBAC)**, with a full PRP scrub on readback (structured fields + free text + id)
+  and a collision-free close id. Voice capture uses an **Amazon Transcribe** seam plus Claude
+  structuring, where the **observations are the DM's verbatim transcript (the LLM never alters
+  them; unstated → empty, never fabricated)**; the draft is reviewed before save, and the loop
+  closes (voice → saved → next ride-along prep). — `src/coach/components/close_capture.py`,
+  `src/coach/llm/transcribe.py`.
 
 ---
 

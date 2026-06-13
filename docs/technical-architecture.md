@@ -1,11 +1,13 @@
 # Technical architecture
 
-> **Audience:** engineers. **Scope:** the **complete target architecture** of the field
-> intelligence coach — the whole system, every capability — described layer by layer to match
-> the architecture diagram. The morning coaching brief (Phases 1–6) is built and tested; the
-> later capabilities (Phases 7–10) are planned.
-> **For what is built today versus planned next, [`docs/project-status.md`](project-status.md)
-> is the single source of truth** (this doc does not repeat per-component build status).
+> **Audience:** engineers. **Scope:** the **complete, now-fully-built target architecture** of
+> the field intelligence coach — the whole system, every capability — described layer by layer
+> to match the architecture diagram. The morning coaching brief and all of the post-MVP
+> capabilities (Phases 7–10: theme aggregation, Summit optimization, covariant analysis, and
+> verbal-feedback / CLOSE capture) are built and tested.
+> **For the current build status, [`docs/project-status.md`](project-status.md) is the single
+> source of truth** (this doc describes the architecture and does not repeat per-component build
+> status).
 > Design source: `specs/001-morning-coaching-brief/plan.md`, `tasks.md`, `CLAUDE.md`, and the
 > code under `src/coach/`.
 
@@ -38,24 +40,30 @@ read (and, for the write path, every write).
    **leadership / region-level roles** (their whole region, or all regions). Scope is a
    property of the role, resolved server-side (never chosen by the caller).
 2. **Experience** — the **DM workspace** (the read-only morning-brief web page) and a
-   **leadership dashboard** (Phase 7 — an **aggregate-only, RBAC-scoped** cross-rep view showing
-   **patterns and counts only, never named individual reps**; region / all scope only).
+   **leadership dashboard** (an **aggregate-only, RBAC-scoped** cross-rep view showing
+   **patterns and counts only, never named individual reps**; region / all scope only). The
+   theme-aggregation data behind the dashboard is built (`components/theme_aggregation.py`).
 3. **API** — a FastAPI service. It resolves the caller's identity into an `AccessContext`
-   (role → scope, from config) and exposes read endpoints for the brief; the CLOSE write
-   endpoint is the Phase 10 addition.
+   (role → scope, from config) and exposes read endpoints for the brief. The **write path** for
+   CLOSE capture is built at the data-access door (`save_close_record`, writer-scope RBAC), so
+   the API surface can read **and** write through the same door.
 4. **Orchestration** — a fixed, in-code **LangGraph DAG** (no autonomous loops) that runs the
-   builders in a deterministic order and assembles the brief (Section 5).
+   builders in a deterministic order, assembles the brief, and enforces **narrate-before-expose**
+   (Section 5).
 5. **The five brief builders** — one per section: **prioritize** (deterministic ranking),
    **coaching focus**, **ride-along prep**, **accounts / business context** (per brand), and
    **opener**. Each returns a recommendation carrying a structured `Reason`.
-6. **Intelligence** — analytics that feed the builders, all **computed in code** (deterministic,
-   explainable — the LLM never scores or decides them): **Summit / IC-plan** lift as a ranking
-   signal (Phase 8), **covariant analysis** of what moves with results (Phase 9), and
-   aggregate-only **theme aggregation** across reps for leadership (Phase 7).
+6. **Intelligence** — analytics that feed the builders and the leadership view, all **computed
+   in code** (deterministic, explainable — the LLM never scores or decides them): **Summit /
+   IC-plan** lift as a ranking signal (`components/summit.py`), **covariant analysis** of what
+   moves with results (`components/covariant.py`), and aggregate-only **theme aggregation**
+   across reps for leadership (`components/theme_aggregation.py`).
 7. **AI & capture** — **Claude on Amazon Bedrock** (wording only — narrates reasons, drafts
    focus/opener text; never decides ranks/scores), **Titan embeddings** for the notes RAG,
-   **Amazon Transcribe** *(planned)* for verbal feedback, and **CLOSE capture** of post-ride
-   observations (Phase 10 — the assistant **records** the human's input, it does not act).
+   **Amazon Transcribe** for verbal feedback (`llm/transcribe.py` — a deterministic offline fake
+   for tests), and **CLOSE capture** of post-ride observations (`components/close_capture.py` —
+   the assistant **records** the human's input, it does not act; the observations are the DM's
+   verbatim transcript, which the LLM never alters).
 8. **Data-access door** — the single `DataAccess` / `Retriever` seam. **RBAC and PRP scrubbing
    are enforced here on every read** (and every write), so no component can widen scope or see
    a PRP HCP. This is the only layer that talks to the stores.
@@ -72,46 +80,83 @@ synthetic data for real connectors later is a source change, not a rewrite. Orch
 lives in **code**; the **rep ranking is a deterministic scoring function**, and the LLM only
 turns the structured reason into clear language — it **never decides or reorders the ranking**.
 
-### Planned next capabilities (Phases 7–10)
+### Built capabilities (Phases 7–10)
 
 Built on the same architecture above; numbered by capability. Each keeps the constitution
 rules intact (deterministic logic in code; LLM wording only; the single door with RBAC + PRP on
-reads **and** writes; a `reason` on everything; synthetic-only; suggestion/record-only). Current
-build status lives in [`docs/project-status.md`](project-status.md).
+reads **and** writes; a `reason` on everything; synthetic-only; suggestion/record-only). For
+build status see [`docs/project-status.md`](project-status.md) (the single source of truth).
 
-- **Capability #6 — theme aggregation (Phase 7):** a leadership view of common coaching themes
-  across reps. It shows **patterns and counts only — never named individual reps or
-  individually identifiable detail** (FR-016), and is **RBAC-scoped**: only the **region** and
-  **all** scope levels see it, each only across their own region / all regions (a scoped,
-  aggregate-only roll-up behind the same data-access door — not an unscoped one).
-- **Capability #5 — Summit optimization (Phase 8):** add the **Summit / IC-plan lift** as a new
-  ranking signal **computed in code** from data + per-team config (a per-team formula) —
-  deterministic and explainable like the four existing signals; **the LLM never scores it**.
-- **Capability #4 — covariant analysis (Phase 9):** deeper insight in the accounts section —
-  which factors move together with results — **computed in code, deterministic and explainable,
-  not LLM-decided** (the LLM only narrates the structured finding); needs a defined "success"
-  measure first.
-- **Capability #2 — verbal feedback / CLOSE (Phase 10):** **record** the DM's post-ride
-  observations (**Amazon Transcribe (planned)** + a CLOSE note) — the assistant records the
-  human's input, it does not act. The **first write path**: writes go through the **same door
-  under the writer's own scope (writer-scope RBAC)**, and the free-text notes are **PRP-scrubbed
-  + RBAC-scoped on readback** like every other note (**ADR 0002**), closing the OPEN→CLOSE loop.
+- **Capability #6 — theme aggregation:** a leadership view of common coaching themes across
+  reps (`components/theme_aggregation.py`). It shows **patterns and counts only — never named
+  individual reps or individually identifiable detail** (FR-016), is **small-cell suppressed**,
+  and is **RBAC-scoped**: only the **region** and **all** scope levels see it, each only across
+  their own region / all regions (a scoped, aggregate-only roll-up behind the same data-access
+  door — not an unscoped one).
+- **Capability #5 — Summit optimization:** the **Summit / IC-plan lift** is a ranking signal
+  **computed in code** from data + per-team config (a per-team formula), normalized 0..1 via the
+  config cap and weighted like the four existing signals (`components/summit.py`, folded into
+  `components/ranking.py`) — deterministic and explainable; **the LLM never scores it**. It is
+  **off by default** (zero weight), so the four-signal MVP ranking is unchanged unless enabled.
+- **Capability #4 — covariant analysis:** deeper insight in the accounts section — which
+  factors move together with results (`components/covariant.py`) — **computed in code,
+  deterministic and explainable, not LLM-decided** (the LLM only narrates the structured
+  finding). It is a transparent counts/rates/lift association against a config-defined "success"
+  measure; thin data returns a clear insufficient-data state, never a fabricated finding.
+- **Capability #2 — verbal feedback / CLOSE:** **record** the DM's post-ride observations
+  (**Amazon Transcribe** voice capture + a CLOSE note; `llm/transcribe.py`,
+  `components/close_capture.py`) — the assistant records the human's input, it does not act. The
+  **write path** goes through the **same door under the writer's own scope (writer-scope RBAC)**,
+  and the free-text notes are **PRP-scrubbed + RBAC-scoped on readback** like every other note
+  (**ADR 0002**), closing the OPEN→CLOSE loop. The observations are the DM's verbatim transcript;
+  the LLM only extracts the agreed-actions / observe-next the DM actually stated and never alters
+  the observations or invents anything (unstated → empty).
+
+### Architecture decision records (ADRs)
+
+Three decisions shape the architecture; each has a one-page ADR under `docs/adr/`:
+
+- **ADR 0001 — signal normalization:** each ranking signal is mapped to 0..1 so the config
+  weights (not raw scales) control its influence. [`docs/adr/0001-signal-normalization.md`](adr/0001-signal-normalization.md)
+- **ADR 0002 — notes retriever RBAC + PRP:** the coaching-notes retriever enforces RBAC + PRP at
+  query time, through the same single data-access door — not a separate trust boundary.
+  [`docs/adr/0002-notes-retriever-rbac-prp.md`](adr/0002-notes-retriever-rbac-prp.md)
+- **ADR 0003 — orchestration + narrate-before-expose:** a fixed-graph (DAG) orchestration with
+  narrate-before-expose, so no un-narrated placeholder ever reaches a user.
+  [`docs/adr/0003-orchestration-and-narrate-before-expose.md`](adr/0003-orchestration-and-narrate-before-expose.md)
+
+### Key invariants
+
+The rules every layer must hold, enforced in code and by automated tests:
+
+- **Deterministic decisions are computed in code** — ranking, Summit lift, covariant
+  association, and theme aggregation are all pure code, never decided by the LLM.
+- **The LLM only writes wording / structures the human's words** — it never decides and never
+  fabricates: covariant findings are code-computed; the voice-CLOSE observations are the DM's
+  verbatim transcript that the LLM never alters; anything unstated stays empty, never invented.
+- **The single data-access door enforces RBAC scope + PRP scrubbing on every read AND write** —
+  the CLOSE write path uses the same door under writer-scope RBAC, and PRP is scrubbed on
+  readback (structured fields + free text + id).
+- **Aggregation is patterns / counts only and small-cell suppressed** — never named individuals.
+- **Narrate-before-expose** — no un-narrated placeholder is ever returned.
+- **Suggestion-only / the human decides** — the assistant suggests or records; it never acts.
+  **Synthetic data only.**
 
 ---
 
 ## 2. Module / package map
 
-All packages live under `src/coach/`. (For which pieces are built today versus planned, see
-[`docs/project-status.md`](project-status.md) — this map does not repeat build status.)
+All packages live under `src/coach/`. (For build status see
+[`docs/project-status.md`](project-status.md) — this map does not repeat it.)
 
 | Package | Responsibility | Key files |
 |---|---|---|
 | `config` | Resolve settings from env: Bedrock model id, region, DB path, seed, ranking weights + normalization caps + narration thresholds (model id never hard-coded) | `config/settings.py` |
 | `schemas` | Pydantic entities, the `Reason` object, recommendation objects + `CoachingBrief`, the synthetic `Dataset`; the `Brand` enum, `Account.prp`, `AccountBrandMetrics`, `CallActivity.brand` | `schemas.py` |
-| `data_access` | The single read/write seam: `DataAccess` + `Retriever` Protocols, `AccessContext`, `ScopeError`; the SQLite store; RBAC + PRP scrubbing; the coaching-notes retriever | `data_access/interface.py`, `sqlite_store.py`, `rbac.py`, `notes_retriever.py`, `vector_store.py` |
+| `data_access` | The single read/write seam: `DataAccess` + `Retriever` Protocols, `AccessContext`, `ScopeError`; the SQLite store; RBAC + PRP scrubbing on every read AND the `save_close_record` write (writer-scope RBAC); the coaching-notes retriever | `data_access/interface.py`, `sqlite_store.py`, `rbac.py`, `notes_retriever.py`, `vector_store.py` |
 | `synthetic` | Seeded synthetic data generator + CLI (`python -m coach.synthetic.generate`): PRP-flagged HCPs (≥1 guaranteed) and per-(account, brand) metrics + call activity across the five brands | `synthetic/generate.py` |
-| `llm` | Bedrock Claude wrapper + Titan embeddings (model id from config) and the narration step (wording only); offline fakes for tests/demo | `llm/client.py`, `embeddings.py`, `narrate.py` |
-| `components` | The 5 brief builders (ranking, coaching focus, ride-along prep, accounts/context, opener) + the shared signals helper | `components/ranking.py`, `signals.py`, `coaching_focus.py`, `ride_along_prep.py`, `accounts_context.py`, `opener.py` |
+| `llm` | Bedrock Claude wrapper + Titan embeddings (model id from config), the narration step (wording only), and the Amazon Transcribe voice seam; offline fakes for tests/demo | `llm/client.py`, `embeddings.py`, `narrate.py`, `transcribe.py` |
+| `components` | The 5 brief builders (ranking, coaching focus, ride-along prep, accounts/context, opener) + the shared signals helper, plus the intelligence builders (Summit, covariant, theme aggregation) and CLOSE capture | `components/ranking.py`, `signals.py`, `coaching_focus.py`, `ride_along_prep.py`, `accounts_context.py`, `opener.py`, `summit.py`, `covariant.py`, `theme_aggregation.py`, `close_capture.py` |
 | `orchestrator` | The fixed LangGraph DAG + brief assembly (narrate-before-expose guard + the 5-section rubric) | `orchestrator/brief_graph.py`, `assembly.py` |
 | `observability` | Privacy-safe per-brief audit records + field-level data classification (no out-of-scope data or raw PII in logs) | `observability/audit.py` |
 | `api` | The read-only FastAPI app (identity → `AccessContext`, GET brief endpoints, serves the UI) + an offline demo server | `api/app.py`, `demo.py` |
@@ -431,5 +476,5 @@ Each MVP piece is built to swap for a managed AWS service behind the same interf
 
 ---
 
-*This doc describes the complete target architecture. For the current build status — which
-phases are done and what is planned next — see [`docs/project-status.md`](project-status.md).*
+*This doc describes the complete, now-fully-built target architecture. For the current build
+status, [`docs/project-status.md`](project-status.md) is the single source of truth.*
