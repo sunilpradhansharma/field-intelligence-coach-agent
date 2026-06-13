@@ -25,7 +25,8 @@ with fakes; production uses Bedrock (model id from config — never hard-coded).
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -180,11 +181,44 @@ def _assert_rankings_narrated(rankings: list[RepRanking]) -> None:
         )
 
 
+# ----------------------------------------------------------------------- stale-schema guard
+def _verify_db_schema(deps: AppDeps) -> None:
+    """Fail fast with a CLEAR message if the configured on-disk DB predates the current schema,
+    instead of a cryptic downstream `IndexError` when a read hits a column an old DB lacks.
+
+    Synthetic-only: we DETECT a stale DB and tell the user to regenerate — there are no
+    migrations. Skipped for an in-memory or not-yet-created DB (the generator stamps the current
+    version on creation); skipped for an empty file (the generator will populate + stamp it)."""
+    path = deps.db_path
+    if path == ":memory:" or not Path(path).exists():
+        return
+    store = deps.store_factory(path)
+    try:
+        if store.has_schema():
+            store.require_current_schema()  # raises SchemaVersionError with the regenerate hint
+    finally:
+        store.close()
+
+
 # --------------------------------------------------------------------------------- the app
 def create_app(deps: AppDeps | None = None) -> FastAPI:
     """Build the read-only API. Pass `deps` (with fakes) in tests; omit for production."""
-    app = FastAPI(title="Field Intelligence Coach — read-only brief API", version="0.1.0")
-    app.state.deps = deps or default_deps()
+    resolved = deps or default_deps()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Guard at SERVER startup (uvicorn / `with TestClient(app)`): a stale on-disk DB fails
+        # loudly here — before any request — rather than mid-read. Importing the module (and the
+        # module-level `app = create_app()`) does NOT run this, so a stale DB never breaks import.
+        _verify_db_schema(resolved)
+        yield
+
+    app = FastAPI(
+        title="Field Intelligence Coach — read-only brief API",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    app.state.deps = resolved
 
     # --- error mapping: clean status codes, never a stack trace or sensitive detail ---
     @app.exception_handler(ScopeError)

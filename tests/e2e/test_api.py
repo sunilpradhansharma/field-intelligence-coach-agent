@@ -232,3 +232,50 @@ def test_sequential_requests_are_independent(client):
     dm_ids = [r["rep_id"] for r in client.get("/api/reps", headers=DM).json()["ranked_reps"]]
     assert any(rid.startswith("rep_d2_") for rid in region_ids)
     assert all(rid.startswith("rep_d1_") for rid in dm_ids)
+
+
+# ----------------------------- regression: appended coaching_sessions.account_id read by NAME
+def test_ranking_server_path_reads_coaching_sessions_account_id_by_name(db_path):
+    """Regression for the Phase 10 appended `account_id` column on `coaching_sessions`.
+
+    The server ranking path (`/api/reps` -> `rank_reps` -> `compute_rep_signals` ->
+    `get_coaching_sessions`) reads coaching-session rows over the REAL file-backed connection and
+    its `sqlite3.Row` factory. Because every column is read BY NAME, appending `account_id` as the
+    last column can never raise `IndexError: No item with that key`. The in-memory unit tests build
+    `CoachingSession`/`CloseRecord` objects directly and never exercise this row-factory read of a
+    persisted row carrying `account_id` — this test does, on the same path the API uses."""
+    from coach.data_access.interface import AccessContext
+    from coach.schemas import CloseRecord, Role
+
+    dm = AccessContext(
+        user_id="dm_d1", role=Role.district_manager, region_id="R1", district_id="D1"
+    )
+    store = SqliteStore(db_path)
+    try:
+        # Tie a CLOSE note to a real, NON-PRP account for an in-scope rep -> a non-null account_id.
+        account_id = store.get_accounts(dm, "rep_d1_001")[0].account_id
+        store.save_close_record(
+            dm,
+            CloseRecord(
+                rep_id="rep_d1_001",
+                date="2026-06-09",
+                observations="Strong open.",
+                agreed_actions=["Roleplay objections"],
+                observe_next=[],
+                account_id=account_id,
+            ),
+        )
+        # get_coaching_sessions returns account_id, read BY NAME — the persisted non-null value
+        # round-trips, and the column is Optional (a seeded note may legitimately carry None).
+        sessions = store.get_coaching_sessions(dm, "rep_d1_001")
+        assert any(s.account_id == account_id for s in sessions)
+        assert all(s.account_id is None or isinstance(s.account_id, str) for s in sessions)
+    finally:
+        store.close()
+
+    # The SERVER path that the runtime IndexError broke: ranking reads coaching_sessions for every
+    # in-scope rep. A row-access bug would surface as a 500 here; a clean read is a 200.
+    client = TestClient(create_app(_deps(db_path)), raise_server_exceptions=False)
+    r = client.get("/api/reps", headers=DM)
+    assert r.status_code == 200
+    assert r.json()["ranked_reps"]  # the ranking (which read coaching_sessions) was produced

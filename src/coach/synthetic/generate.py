@@ -326,14 +326,15 @@ def main() -> None:
     args = parser.parse_args()
 
     # Imported lazily so the generator module has no hard dependency on the store.
-    from coach.data_access.sqlite_store import SqliteStore
+    from coach.data_access.sqlite_store import SCHEMA_VERSION, SqliteStore
 
     ds = generate(args.seed)
     with SqliteStore(args.db) as store:
-        store.write_dataset(ds)
+        store.write_dataset(ds)  # stamps PRAGMA user_version = SCHEMA_VERSION
 
     print(
-        f"Synthetic data generated (seed={args.seed}, synthetic={ds.meta.synthetic}) -> {args.db}"
+        f"Synthetic data generated (seed={args.seed}, synthetic={ds.meta.synthetic}, "
+        f"schema=v{SCHEMA_VERSION}) -> {args.db}"
     )
     for table, n in ds.meta.counts.items():
         print(f"  {table:<18} {n}")

@@ -73,6 +73,27 @@ CREATE TABLE coaching_sessions (
 );
 """
 
+# Schema version stamped into every generated DB (SQLite `PRAGMA user_version`). BUMP this whenever
+# the table definitions in `_SCHEMA` change, so an old on-disk DB is DETECTED and the user is told
+# to regenerate — synthetic-only, we do NOT migrate. History: v1 = the original schema; v2 added
+# `coaching_sessions.account_id` and the per-(account, brand) `account_brand_metrics` columns.
+# (A DB built before versioning existed has the SQLite default `user_version = 0`, so it also
+# fails the check and is reported as stale.)
+SCHEMA_VERSION = 2
+
+
+class SchemaVersionError(RuntimeError):
+    """Raised when an on-disk DB's stamped schema version does not match the code's
+    `SCHEMA_VERSION` — the DB predates the current schema and must be regenerated."""
+
+
+def schema_mismatch_message(path: str, found: int, expected: int) -> str:
+    """The CLEAR, actionable message for a stale DB (preferred over a cryptic downstream error)."""
+    return (
+        f"Database at {path} was built with schema v{found} but the code expects v{expected}. "
+        f"Regenerate it: uv run python -m coach.synthetic.generate --seed 42"
+    )
+
 
 class SqliteStore(DataAccess):
     """SQLite-backed structured store. Use as a context manager or call `close()`."""
@@ -149,6 +170,9 @@ class SqliteStore(DataAccess):
         ):
             cur.execute(f"DROP TABLE IF EXISTS {table}")
         cur.executescript(_SCHEMA)
+        # Stamp the schema version so a later open can detect a stale DB (PRAGMA takes no bound
+        # params; SCHEMA_VERSION is our own int constant, so the f-string is safe).
+        cur.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
         self._conn.commit()
 
     def write_dataset(self, ds: Dataset) -> None:
@@ -405,6 +429,27 @@ class SqliteStore(DataAccess):
         )
         self._conn.commit()
         return saved
+
+    # ------------------------------------------------------------- schema version
+    def schema_version(self) -> int:
+        """The schema version stamped in this DB (`PRAGMA user_version`); `0` if it was never
+        stamped (an empty DB, or one built before schema versioning existed)."""
+        return int(self._conn.execute("PRAGMA user_version").fetchone()[0])
+
+    def has_schema(self) -> bool:
+        """True if the core tables exist — distinguishes a populated DB from an empty/new file."""
+        row = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'coaching_sessions'"
+        ).fetchone()
+        return row is not None
+
+    def require_current_schema(self) -> None:
+        """Raise `SchemaVersionError` (with a clear regenerate hint) if this DB's stamped schema
+        version does not match the code's `SCHEMA_VERSION`. Prefer this loud, early failure over a
+        cryptic downstream `IndexError` when a read hits a column an old DB does not have."""
+        found = self.schema_version()
+        if found != SCHEMA_VERSION:
+            raise SchemaVersionError(schema_mismatch_message(self.db_path, found, SCHEMA_VERSION))
 
     # ---------------------------------------------------------------- test aid
     def count(self, table: str) -> int:

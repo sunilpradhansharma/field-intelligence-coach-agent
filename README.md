@@ -204,7 +204,7 @@ the finished brief — and the matching CLOSE step after the ride.
 *The full coaching loop — OPEN (morning brief) and CLOSE (record after the ride). Two
 safety gates: rep-in-scope, and narrate-before-expose (no half-written brief is ever shown).*
 
-The OPEN (morning brief) in plain English:
+The OPEN (morning brief):
 
 1. The DM asks for today's brief, the morning of a field ride.
 2. The data-access layer checks the DM's scope (own district only) and scrubs out any PRP
