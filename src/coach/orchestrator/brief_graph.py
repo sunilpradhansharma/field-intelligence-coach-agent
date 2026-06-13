@@ -21,6 +21,7 @@ from langgraph.graph import END, START, StateGraph
 
 from coach.components.accounts_context import accounts_context_for_rep
 from coach.components.coaching_focus import coaching_focus_for_rep
+from coach.components.covariant import covariant_analysis
 from coach.components.opener import build_opener
 from coach.components.ranking import rank_reps
 from coach.components.ride_along_prep import ride_along_prep_for_rep
@@ -29,6 +30,7 @@ from coach.data_access.interface import AccessContext, DataAccess, Retriever, Sc
 from coach.llm.client import LLM
 from coach.llm.narrate import (
     narrate_account_focuses,
+    narrate_covariant,
     narrate_focuses,
     narrate_opener,
     narrate_ranking,
@@ -40,6 +42,7 @@ from coach.schemas import (
     AccountFocus,
     CoachingBrief,
     CoachingFocus,
+    CovariantAnalysis,  # noqa: F401 — used at runtime: LangGraph evaluates the BriefState TypedDict
     EmptyState,
     GeneratedFor,
     Opener,
@@ -65,6 +68,7 @@ class BriefState(TypedDict, total=False):
     coaching_focus: list[CoachingFocus]
     ride_along_prep: RideAlongPrep | EmptyState
     accounts: list[AccountFocus]
+    covariant: CovariantAnalysis  # section 4 insight (Phase 9), narrated
     opener: Opener
     brief: CoachingBrief
 
@@ -122,7 +126,14 @@ def _accounts_node(state: BriefState) -> dict:
     ac = accounts_context_for_rep(
         state["ctx"], state["data"], state["selected_rep_id"], state["settings"]
     )
-    return {"accounts": narrate_account_focuses(ac, state["llm"])}
+    # Section-4 insight (Phase 9 / capability #4): the transparent covariant association across the
+    # caller's in-scope (account, brand) data — computed in code, narrated for wording only. Honest
+    # insufficient-data state is preserved by the component when there are too few rows.
+    cov = covariant_analysis(state["ctx"], state["data"], state["settings"])
+    return {
+        "accounts": narrate_account_focuses(ac, state["llm"]),
+        "covariant": narrate_covariant(cov, state["llm"]),
+    }
 
 
 def _opener_node(state: BriefState) -> dict:
@@ -145,6 +156,7 @@ def _assemble_node(state: BriefState) -> dict:
         coaching_focus=state["coaching_focus"],
         ride_along_prep=state["ride_along_prep"],
         accounts=state["accounts"],
+        covariant=state["covariant"],
         opener=state["opener"],
     )
     assert_narrated(brief)  # narrate-before-expose guard — RAISES on any placeholder

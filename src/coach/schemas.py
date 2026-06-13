@@ -337,6 +337,10 @@ class CoachingBrief(BaseModel):
     coaching_focus: list[CoachingFocus]  # section 2
     ride_along_prep: RideAlongPrep | EmptyState  # section 3
     accounts: list[AccountFocus]  # section 4
+    # Section 4 insight (Phase 9 / capability #4): the transparent covariant association across the
+    # caller's in-scope (account, brand) data, with the configured success measure noted. May be in
+    # the honest insufficient-data state. Optional so a brief can be built without it.
+    covariant: CovariantAnalysis | None = None
     opener: Opener  # section 5
     synthetic: bool = True  # data provenance label (Principle III)
 

@@ -155,6 +155,7 @@ def test_brief_is_suggestion_only_pure_data(env):
         "coaching_focus",
         "ride_along_prep",
         "accounts",
+        "covariant",  # Phase 9 section-4 insight (capability #4) — pure data, suggestion-only
         "opener",
         "synthetic",
     }

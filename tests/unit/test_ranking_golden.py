@@ -24,6 +24,13 @@ SEED = 42
 # `Settings.ranking_norm_caps` before weighting, so the weights alone control influence.
 # Normalization also reordered the two top reps (003 now edges 001), because 001's huge raw
 # counts saturate at the cap while 003 scores higher across signals.
+#
+# Phase 8 (Summit) is now ENABLED by default (weight 0.2). For a DM, only ONE district is in
+# scope, so the Summit what-if can never change that district's ranking position → the lift is 0
+# for every D1 rep → the Summit contribution is 0 and these scores / this order are UNCHANGED.
+# (A region/all caller sees a non-zero Summit contribution — proven in test_ranking.py.) What DID
+# change is the reason STRUCTURE: each rep now carries a 5th `summit_opportunity` contributor
+# (raw 0.0 here), asserted below.
 GOLDEN_D1 = [
     ("rep_d1_003", 1, 0.891667),
     ("rep_d1_001", 2, 0.833333),
@@ -42,12 +49,16 @@ TOP_SIGNALS_RAW = {
     "low_call_activity": 13.0,
     "missed_follow_up": 2.0,
     "opportunity_risk": 9.0,
+    # Phase 8 Summit (now enabled): the 5th contributor. Its raw value is the district ranking
+    # LIFT, which is 0 for a DM (only one district in scope -> position can't change).
+    "summit_opportunity": 0.0,
 }
 TOP_SIGNALS_NORMALIZED = {
     "declining_share": 1.0,  # 3.0476 >= cap 3.0 -> saturates
     "low_call_activity": 1.0,  # 13 >= cap 10 -> saturates
     "missed_follow_up": 0.666667,  # 2 / cap 3
     "opportunity_risk": 0.9,  # 9 / cap 10
+    "summit_opportunity": 0.0,  # lift 0 / cap 3 -> 0.0 (no score impact at DM scope)
 }
 
 

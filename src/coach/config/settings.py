@@ -39,9 +39,12 @@ def _default_weights() -> dict[str, float]:
         "low_call_activity": float(os.getenv("COACH_WEIGHT_LOW_CALL_ACTIVITY", "0.25")),
         "missed_follow_up": float(os.getenv("COACH_WEIGHT_MISSED_FOLLOW_UP", "0.25")),
         "opportunity_risk": float(os.getenv("COACH_WEIGHT_OPPORTUNITY_RISK", "0.25")),
-        # Phase 8 Summit opportunity — OFF by default (0.0): the four core signals are unchanged
-        # until a non-zero weight folds Summit into the SAME normalized rollup (ADR 0001).
-        "summit_opportunity": float(os.getenv("COACH_WEIGHT_SUMMIT", "0.0")),
+        # Phase 8 Summit opportunity — ENABLED (capability #5): a non-zero weight folds Summit into
+        # the SAME normalized rollup (ADR 0001) so it shows as a 5th ranking contributor. TUNABLE
+        # (env COACH_WEIGHT_SUMMIT); set to 0.0 to turn Summit back off (the four core signals are
+        # then unchanged). 0.2 is a sensible default — meaningful but below each core signal (0.25).
+        # NOTE: the per-team formula + recovery_fraction remain labeled placeholders/assumptions.
+        "summit_opportunity": float(os.getenv("COACH_WEIGHT_SUMMIT", "0.2")),
     }
 
 

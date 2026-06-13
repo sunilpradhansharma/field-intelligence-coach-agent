@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from coach.components.accounts_context import PENDING_SUMMARY as _ACC_PENDING
 from coach.components.coaching_focus import PENDING_SUMMARY as _FOCUS_PENDING
+from coach.components.covariant import PENDING_SUMMARY as _COV_PENDING
 from coach.components.opener import PENDING_SUMMARY as _OPENER_PENDING_SUMMARY
 from coach.components.opener import PENDING_TEXT as _OPENER_PENDING_TEXT
 from coach.components.ranking import PENDING_SUMMARY as _RANK_PENDING
@@ -29,6 +30,7 @@ PENDING_PLACEHOLDERS: frozenset[str] = frozenset(
         _RIDE_PENDING_SUMMARY,
         _RIDE_PENDING_OPENING,
         _ACC_PENDING,
+        _COV_PENDING,
         _OPENER_PENDING_SUMMARY,
         _OPENER_PENDING_TEXT,
     }
@@ -52,6 +54,8 @@ def _text_fields(brief: CoachingBrief) -> list[tuple[str, str]]:
         fields.append(("ride_along_prep.opening", rap.opening))
     for a in brief.accounts:
         fields.append((f"accounts[{a.account_id}/{a.brand.name}].reason.summary", a.reason.summary))
+    if brief.covariant is not None:
+        fields.append(("covariant.reason.summary", brief.covariant.reason.summary))
     fields.append(("opener.text", brief.opener.text))
     fields.append(("opener.reason.summary", brief.opener.reason.summary))
     return fields

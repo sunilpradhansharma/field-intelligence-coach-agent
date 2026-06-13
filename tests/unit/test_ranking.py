@@ -145,9 +145,12 @@ def test_every_ranking_has_structured_reason(store):
         assert rankings
         for r in rankings:
             assert r.reason.summary  # non-empty (FR-010)
-            # Default config: the four CORE signals (Summit is OFF unless its weight is non-zero).
-            assert {sc.signal for sc in r.reason.signals} == set(CORE_SIGNALS)
-            assert len(r.reason.signals) == 4
+            # Default config now ENABLES Summit (weight 0.2): the four CORE signals PLUS the
+            # `summit_opportunity` 5th contributor; the four core are always present.
+            signal_set = {sc.signal for sc in r.reason.signals}
+            assert set(CORE_SIGNALS) <= signal_set
+            assert SignalName.summit_opportunity in signal_set
+            assert len(r.reason.signals) == 5
             assert len(r.reason.data_points) >= 1  # at least one top-contributor/explainer
 
 

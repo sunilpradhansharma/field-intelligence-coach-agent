@@ -298,6 +298,7 @@ const SIGNAL_LABELS = {
   low_call_activity:"Low call activity",
   missed_follow_up: "Missed follow-up",
   opportunity_risk: "Opportunity / risk",
+  summit_opportunity: "Summit opportunity",
 };
 const SCOPE_TERR = { district: d => d.district_id, region: d => d.region_id, all: () => "All regions", self: d => d.user_id };
 
@@ -471,6 +472,7 @@ function renderBrief(root, b) {
   if (b.accounts && b.accounts.length) {
     for (const a of b.accounts) s4.appendChild(renderAccount(a));
   } else s4.appendChild(emptyLine("No focused accounts to surface for this rep."));
+  if (b.covariant) s4.appendChild(renderCovariant(b.covariant));
   root.appendChild(s4);
 
   // ---- 05 Opener ----
@@ -546,6 +548,24 @@ function renderAccount(a) {
   it.appendChild(ctx);
 
   if (a.reason) it.appendChild(reasonBlock(a.reason, { signals: false }));
+  return it;
+}
+
+function renderCovariant(cov) {
+  // Section-4 insight (Phase 9 / capability #4): a clearly-labelled covariant association line
+  // with its supporting numbers and the configured success measure noted. Honest insufficient-
+  // data state is shown plainly. The numbers are computed in code; only wording is narrated.
+  const it = el("div", "item");
+  const t = el("div", "item-title");
+  t.appendChild(el("span", "brand-tag", "Covariant insight"));
+  if (cov.insufficient_data) {
+    const f = el("span", "flag"); f.textContent = "⚑ Insufficient data"; t.appendChild(f);
+  }
+  it.appendChild(t);
+  it.appendChild(el("div", "meta", "Success measure: " + (cov.success_measure || "—") +
+    "  ·  rows analysed: " + (cov.rows_analyzed != null ? cov.rows_analyzed : "—") +
+    (cov.insufficient_data ? "" : "  ·  overall success rate: " + num(cov.success_rate_overall))));
+  if (cov.reason) it.appendChild(reasonBlock(cov.reason, { signals: false }));
   return it;
 }
 

@@ -169,17 +169,26 @@ def test_changing_the_formula_changes_scores_predictably():
 
 
 # ------------------------------------------ integration into the normalized rollup (P8-T1)
-def test_summit_is_off_by_default_and_folds_in_when_weighted():
+def test_summit_is_on_by_default_and_controlled_by_weight():
     store = _store(_THREE)
     hos = _hos_ctx()
 
-    # Default config (weight 0.0): NO Summit signal, the four-signal scores are unchanged.
-    off = {r.rep_id: r for r in rank_reps(hos, store)}
+    # Summit is now ENABLED by default (weight 0.2): every rep carries the 5th signal.
+    default = {r.rep_id: r for r in rank_reps(hos, store)}
+    for r in default.values():
+        assert SignalName.summit_opportunity in {sc.signal for sc in r.reason.signals}
+
+    # The weight CONTROLS it — forcing it to 0.0 removes the Summit signal entirely (the four-
+    # signal scores), proving the config weight is what folds Summit in (no hidden bypass).
+    base_settings = get_settings()
+    off_settings = replace(
+        base_settings, ranking_weights={**base_settings.ranking_weights, "summit_opportunity": 0.0}
+    )
+    off = {r.rep_id: r for r in rank_reps(hos, store, off_settings)}
     for r in off.values():
         assert SignalName.summit_opportunity not in {sc.signal for sc in r.reason.signals}
 
     # Non-zero Summit weight: folded into the SAME normalized rollup.
-    base_settings = get_settings()
     on_settings = replace(
         base_settings,
         ranking_weights={**base_settings.ranking_weights, "summit_opportunity": 1.0},
