@@ -159,6 +159,10 @@ class CoachingSession(BaseModel):
     agreed_actions: list[str] = Field(default_factory=list)
     observe_next: list[str] = Field(default_factory=list)
     follow_up_done: bool = True  # False -> "missed coaching follow-up" signal
+    # The account/HCP this note is about, when known (set on a CLOSE record). Drives PRP scrubbing
+    # at readback: a note tied to a PRP account is dropped by the retriever (ADR 0002). `None` for
+    # synthetic seed notes (the retriever ties those to an account positionally).
+    account_id: str | None = None
 
 
 class BusinessMetric(BaseModel):
@@ -434,6 +438,29 @@ class CovariantAnalysis(BaseModel):
     optimal_blend: CovariantBlend | None  # the best-associating combination (None if unsupported)
     insufficient_data: bool  # true -> too little data; no association claimed
     reason: Reason  # summary (LLM) + data points (variables, success measure, supporting numbers)
+    synthetic: bool = True
+
+
+# ------------------------------------------- CLOSE capture (Phase 10 / capability #2)
+class CloseRecord(BaseModel):
+    """A post-ride CLOSE note — the DM's OWN observations recorded after a coaching ride
+    (capability #2). The assistant only **records** the human's input; it does not act (FR-011).
+
+    Written through the single data-access door under the **writer's own scope** (writer-scope
+    RBAC), and persisted as a coaching note so the EXISTING scoped + PRP-scrubbed readback
+    (ride-along prep / retriever) surfaces it next time (ADR 0002) — a note tied to a PRP HCP is
+    never surfaced. `author_user_id` / `author_scope_level` are stamped from the authenticated
+    `AccessContext` on save (the writer cannot spoof identity)."""
+
+    rep_id: str = Field(min_length=1)  # the rep the ride was with (must be in the writer's scope)
+    session_id: str = Field(min_length=1)  # the ride / session reference
+    date: str = Field(min_length=1)  # when it was recorded (ISO timestamp)
+    observations: str = Field(min_length=1)  # the DM's free-text observations (the note body)
+    agreed_actions: list[str] = Field(default_factory=list)
+    observe_next: list[str] = Field(default_factory=list)
+    account_id: str | None = None  # the account/HCP discussed, if any (PRP scrubbing on readback)
+    author_user_id: str = ""  # stamped from the writer's AccessContext on save
+    author_scope_level: ScopeLevel | None = None  # stamped from the writer's AccessContext on save
     synthetic: bool = True
 
 

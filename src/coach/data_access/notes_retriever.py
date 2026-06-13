@@ -47,6 +47,7 @@ def _session_from_row(row: sqlite3.Row) -> CoachingSession:
         agreed_actions=json.loads(row["agreed_actions"]),
         observe_next=json.loads(row["observe_next"]),
         follow_up_done=bool(row["follow_up_done"]),
+        account_id=row["account_id"],
     )
 
 
@@ -93,7 +94,9 @@ class NotesRetriever:
         for rep_id in sorted(sessions_by_rep):
             accounts = rep_accounts.get(rep_id, [])
             for i, s in enumerate(sessions_by_rep[rep_id]):
-                account_id = accounts[i % len(accounts)] if accounts else ""
+                # A CLOSE note carries the explicit account it concerns (used for PRP scrubbing);
+                # legacy synthetic notes have none, so tie them to an account positionally.
+                account_id = s.account_id or (accounts[i % len(accounts)] if accounts else "")
                 chunks.append(NoteChunk(session=s, account_id=account_id))
 
         chunks = self._ensure_prp_coverage(chunks, rep_accounts)

@@ -22,6 +22,7 @@ from coach.schemas import (
     AccountBrandMetrics,
     BusinessMetric,
     CallActivity,
+    CloseRecord,
     CoachingSession,
     Rep,
     Role,
@@ -73,6 +74,12 @@ class DataAccess(Protocol):
     def get_business_metrics(self, ctx: AccessContext, rep_id: str) -> list[BusinessMetric]: ...
 
     def get_coaching_sessions(self, ctx: AccessContext, rep_id: str) -> list[CoachingSession]: ...
+
+    # The single WRITE path (Phase 10 / capability #2): record a CLOSE note. Enforces the SAME
+    # RBAC as reads — the writer may only write for a rep in their own scope (out-of-scope ->
+    # ScopeError). The note is persisted so the existing scoped + PRP-scrubbed readback surfaces
+    # it later (ADR 0002). It RECORDS the human's input — never an autonomous action (FR-011).
+    def save_close_record(self, ctx: AccessContext, record: CloseRecord) -> CloseRecord: ...
 
 
 @runtime_checkable

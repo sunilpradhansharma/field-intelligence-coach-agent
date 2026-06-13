@@ -26,6 +26,7 @@ from coach.schemas import (
     Brand,
     BusinessMetric,
     CallActivity,
+    CloseRecord,
     CoachingSession,
     Dataset,
     OpportunityLevel,
@@ -68,7 +69,7 @@ CREATE TABLE call_activity (
 CREATE TABLE coaching_sessions (
     session_id TEXT PRIMARY KEY, rep_id TEXT NOT NULL, date TEXT NOT NULL,
     notes_text TEXT NOT NULL, agreed_actions TEXT NOT NULL, observe_next TEXT NOT NULL,
-    follow_up_done INTEGER NOT NULL
+    follow_up_done INTEGER NOT NULL, account_id TEXT
 );
 """
 
@@ -223,7 +224,7 @@ class SqliteStore(DataAccess):
             ],
         )
         cur.executemany(
-            "INSERT INTO coaching_sessions VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO coaching_sessions VALUES (?,?,?,?,?,?,?,?)",
             [
                 (
                     s.session_id,
@@ -233,6 +234,7 @@ class SqliteStore(DataAccess):
                     json.dumps(s.agreed_actions),
                     json.dumps(s.observe_next),
                     int(s.follow_up_done),
+                    s.account_id,
                 )
                 for s in ds.coaching_sessions
             ],
@@ -367,9 +369,42 @@ class SqliteStore(DataAccess):
                 agreed_actions=json.loads(r["agreed_actions"]),
                 observe_next=json.loads(r["observe_next"]),
                 follow_up_done=bool(r["follow_up_done"]),
+                account_id=r["account_id"],
             )
             for r in rows
         ]
+
+    # ------------------------------------------------------------------- write
+    def save_close_record(self, ctx: AccessContext, record: CloseRecord) -> CloseRecord:
+        """Record a CLOSE note through the single door (Phase 10 / capability #2).
+
+        Writer-scope RBAC: `require_rep_in_scope` runs BEFORE any write, so a caller may write
+        ONLY for a rep in their own scope — an out-of-scope (or non-existent) rep raises
+        `ScopeError`, indistinguishable from not-found, exactly like a read. The author identity
+        is stamped from the authenticated `ctx` (it cannot be spoofed). The note is persisted as a
+        coaching note (carrying its `account_id`), so the existing scoped + PRP-scrubbed readback
+        (ride-along prep / retriever) surfaces it next time — and a PRP-tied note is scrubbed there
+        (ADR 0002). This RECORDS the DM's own input; it is not an autonomous action (FR-011)."""
+        rbac.require_rep_in_scope(self._conn, ctx, record.rep_id)  # SAME RBAC as reads — fail first
+        saved = record.model_copy(
+            update={"author_user_id": ctx.user_id, "author_scope_level": ctx.scope_level}
+        )
+        # Persist as a coaching note in the SAME table the readback reads (no second path).
+        self._conn.execute(
+            "INSERT OR REPLACE INTO coaching_sessions VALUES (?,?,?,?,?,?,?,?)",
+            (
+                saved.session_id,
+                saved.rep_id,
+                saved.date,
+                saved.observations,
+                json.dumps(saved.agreed_actions),
+                json.dumps(saved.observe_next),
+                1,  # a recorded CLOSE note is a completed follow-up, not a missed one
+                saved.account_id,
+            ),
+        )
+        self._conn.commit()
+        return saved
 
     # ---------------------------------------------------------------- test aid
     def count(self, table: str) -> int:
