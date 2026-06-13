@@ -10,6 +10,7 @@ Validation rules enforced here (from the spec):
 from __future__ import annotations
 
 from enum import StrEnum
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
@@ -453,7 +454,10 @@ class CloseRecord(BaseModel):
     `AccessContext` on save (the writer cannot spoof identity)."""
 
     rep_id: str = Field(min_length=1)  # the rep the ride was with (must be in the writer's scope)
-    session_id: str = Field(min_length=1)  # the ride / session reference
+    # The note's unique id (also the persisted note's primary key). Defaults to a fresh unique id
+    # so two CLOSE records can NEVER collide / cross-contaminate; tests may inject a fixed id for
+    # determinism. Never a derived/reused value.
+    session_id: str = Field(default_factory=lambda: f"close_{uuid4().hex}", min_length=1)
     date: str = Field(min_length=1)  # when it was recorded (ISO timestamp)
     observations: str = Field(min_length=1)  # the DM's free-text observations (the note body)
     agreed_actions: list[str] = Field(default_factory=list)

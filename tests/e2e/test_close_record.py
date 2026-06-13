@@ -55,9 +55,9 @@ def _prp_rep_and_account(ds) -> tuple[str, str]:
 
 
 def _close(rep_id: str, **kw) -> CloseRecord:
+    # session_id is left to default to a fresh UNIQUE id (collision-free) unless a test injects one.
     base = dict(
         rep_id=rep_id,
-        session_id=f"close_{rep_id}",
         date="2026-06-09",
         observations="Strong opening; objection handling needs work.",
         agreed_actions=["Roleplay objection handling next week"],
@@ -119,28 +119,41 @@ def test_saved_close_record_surfaces_in_the_next_ride_along(env):
 
 
 # ------------------------------------------------------- PRP on readback (P10-T3, ADR 0002)
-def test_prp_tied_close_note_is_scrubbed_on_readback_at_every_scope(env):
+def test_prp_tied_close_note_is_fully_scrubbed_on_readback_at_every_scope(env):
     store, ds = env
     prp_rep, prp_account = _prp_rep_and_account(ds)
-    store.save_close_record(
+    # A PRP-tied close record with a marker in EVERY field — body, agreed_actions, observe_next.
+    saved = store.save_close_record(
         _dm_ctx() if prp_rep.startswith("rep_d1") else _hos_ctx(),
         _close(
             prp_rep,
-            session_id="close_prp",
             observations="PRP-tied note SECRET_MARKER.",
+            agreed_actions=["agreed SECRET_MARKER"],
+            observe_next=["observe SECRET_MARKER"],
             account_id=prp_account,
         ),
     )
     retriever = NotesRetriever(store, FakeEmbeddings())
     retriever.index()
 
-    # The PRP-tied note must never surface — at DM, region, or all scope.
+    # NONE of the PRP record's fields may surface — free text, structured fields, OR its id —
+    # at any scope level (the WHOLE record is scrubbed on readback; ADR 0002 / FR-020).
     for ctx in (_dm_ctx(), _region_ctx(), _hos_ctx()):
         prep = ride_along_prep_for_rep(ctx, store, retriever, prp_rep)
-        texts = (
-            " ".join(n.text for n in prep.prior_notes) if isinstance(prep, RideAlongPrep) else ""
+        if not isinstance(prep, RideAlongPrep):
+            continue  # an EmptyState surfaces nothing — also fine
+        note_texts = " ".join(n.text for n in prep.prior_notes)
+        agreed_texts = " ".join(a.text for a in prep.agreed_actions)
+        observe_texts = " ".join(o.text for o in prep.observe_next)
+        surfaced_ids = (
+            {n.session_id for n in prep.prior_notes}
+            | {a.session_id for a in prep.agreed_actions}
+            | {o.session_id for o in prep.observe_next}
         )
-        assert "SECRET_MARKER" not in texts
+        assert "SECRET_MARKER" not in note_texts  # free-text body scrubbed
+        assert "SECRET_MARKER" not in agreed_texts  # structured agreed_actions scrubbed
+        assert "SECRET_MARKER" not in observe_texts  # structured observe_next scrubbed
+        assert saved.session_id not in surfaced_ids  # the PRP record's id never surfaces
 
 
 # ------------------------------------------------------------------- validation (P10-T4)
@@ -162,11 +175,32 @@ def test_write_records_the_dms_input_verbatim(env):
         observations="DM's exact words, unchanged.",
         account_id=_non_prp_account(ds, "rep_d1_001"),
     )
-    store.save_close_record(dm, record)
+    saved = store.save_close_record(dm, record)
 
     # Read it back through the normal scoped path: the persisted note is the DM's input verbatim
     # (the system stored it; it did not generate or alter it — the human is the source of truth).
     sessions = {s.session_id: s for s in store.get_coaching_sessions(dm, "rep_d1_001")}
-    saved = sessions["close_rep_d1_001"]
-    assert saved.notes_text == "DM's exact words, unchanged."
-    assert saved.agreed_actions == ["Roleplay objection handling next week"]
+    note = sessions[saved.session_id]
+    assert note.notes_text == "DM's exact words, unchanged."
+    assert note.agreed_actions == ["Roleplay objection handling next week"]
+
+
+# ------------------------------------------------ collision-free ids (FIX 2)
+def test_close_record_ids_are_unique_and_do_not_cross_contaminate(env):
+    store, ds = env
+    dm = _dm_ctx()
+    acct = _non_prp_account(ds, "rep_d1_001")
+    # Two CLOSE records for the SAME rep with no explicit id -> distinct, collision-free ids.
+    r1 = _close("rep_d1_001", observations="First close note ALPHA.", account_id=acct)
+    r2 = _close("rep_d1_001", observations="Second close note BETA.", account_id=acct)
+    assert r1.session_id != r2.session_id  # unique by default
+
+    s1 = store.save_close_record(dm, r1)
+    s2 = store.save_close_record(dm, r2)
+    assert s1.session_id != s2.session_id
+
+    # Both are persisted as DISTINCT notes — neither overwrites the other (no cross-contamination).
+    sessions = {s.session_id: s for s in store.get_coaching_sessions(dm, "rep_d1_001")}
+    assert s1.session_id in sessions and s2.session_id in sessions
+    assert sessions[s1.session_id].notes_text == "First close note ALPHA."
+    assert sessions[s2.session_id].notes_text == "Second close note BETA."

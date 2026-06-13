@@ -100,12 +100,17 @@ def ride_along_prep_for_rep(
     if not sessions:
         return _empty_state(rep_id, NO_HISTORY_MESSAGE)
 
-    # Note free-text via the RETRIEVER (RBAC + PRP guarded). PRP-tied notes are excluded here,
-    # so they are never surfaced — and we gate the structured fields to the same session set.
+    # Note free-text via the RETRIEVER (the RBAC + PRP-guarded entry point). A PRP-tied note is
+    # dropped by the retriever, so it never appears in `recalled_by_id`.
     query = _recall_query(ctx, data, rep_id, settings)
     recalled = retriever.search_notes(ctx, rep_id, query, k=settings.ride_along_max_notes * 5 + 5)
     recalled_by_id = {s.session_id: s for s in recalled}
 
+    # LOAD-BEARING PRP/RBAC GATE: a session surfaces ONLY if the retriever returned it. This
+    # scrubs the WHOLE record — its free text AND its structured fields (agreed_actions /
+    # observe_next) AND its session_id — because everything below is derived from `surfaceable`.
+    # `get_coaching_sessions` itself is RBAC-scoped but does not PRP-filter note bodies, so this
+    # intersection is what enforces PRP on the structured fields too (ADR 0002). Do not bypass it.
     surfaceable = [s for s in sessions if s.session_id in recalled_by_id]
     if not surfaceable:
         return _empty_state(rep_id, RESTRICTED_MESSAGE)
