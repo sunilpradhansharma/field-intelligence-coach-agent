@@ -19,48 +19,8 @@ from coach.api.app import AppDeps, create_app
 from coach.config.settings import get_settings
 from coach.data_access.sqlite_store import SqliteStore
 from coach.llm.embeddings import FakeEmbeddings
-from coach.llm.narrate import offline_ranking_summary
+from coach.llm.factory import OfflineLLM
 from coach.synthetic import generate
-
-
-class DemoNarrator:
-    """Deterministic, offline stand-in for the Bedrock LLM. Wording only — turns the structured
-    reason input into one short sentence; adds no facts and changes no numbers."""
-
-    def narrate(self, reason_input: dict, instruction: str) -> str:
-        ri = reason_input
-        # Coaching focus
-        if "focus_area" in ri:
-            return f"Coach on {ri['focus_area'].lower()} — the rep's recent signals point here."
-        # Account / brand
-        if "brand" in ri:
-            ctx = ri.get("context", {})
-            tail = (
-                "call activity is dropping where the opportunity is biggest"
-                if ri.get("mismatch_flag")
-                else f"{ctx.get('performance', 'tracked')} performance, worth a steady look"
-            )
-            return f"{ri['brand']}: {tail}."
-        # Opener (talking points present)
-        if "talking_points" in ri:
-            pts = ri.get("talking_points", [])
-            if "OPEN" in instruction.upper():
-                lead = pts[0]["text"] if pts else "today's priorities"
-                return f"Let's start with {lead.lower()} — how are you thinking about it?"
-            return "Built from the rep's top priority signal, coaching focus, and a key account."
-        # Ride-along prep / empty state
-        if "has_history" in ri:
-            if not ri.get("has_history"):
-                return "No prior coaching history yet for this rep — start fresh today."
-            n = len(ri.get("prior_notes", []))
-            if "OPEN" in instruction.upper():
-                return "Pick up on the actions you agreed last time and what you said you'd watch."
-            return f"Recent coaching covered {n} prior note(s), with agreed actions to follow up."
-        # Rep ranking (signals present) — priority-aware wording, config-driven (no-gap reps are
-        # not called "the priority"); deterministic. See coach.llm.narrate.offline_ranking_summary.
-        if "signals" in ri:
-            return offline_ranking_summary(ri)
-        return "See the supporting signals and data points below."
 
 
 def _seeded_db_path() -> str:
@@ -81,7 +41,7 @@ def create_demo_app():
     deps = AppDeps(
         db_path=_seeded_db_path(),
         settings=settings,
-        llm=DemoNarrator(),
+        llm=OfflineLLM(),  # always offline here — the demo never calls AWS (see coach.llm.factory)
         embedder=FakeEmbeddings(),
     )
     return create_app(deps)

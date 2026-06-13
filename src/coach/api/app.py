@@ -38,8 +38,9 @@ from coach.config.settings import Settings, get_settings
 from coach.data_access.interface import AccessContext, ScopeError
 from coach.data_access.notes_retriever import NotesRetriever
 from coach.data_access.sqlite_store import SqliteStore
-from coach.llm.client import LLM, BedrockLLM
-from coach.llm.embeddings import BedrockEmbeddings, EmbeddingProvider
+from coach.llm.client import LLM
+from coach.llm.embeddings import EmbeddingProvider
+from coach.llm.factory import make_embedder, make_llm
 from coach.llm.narrate import narrate_rankings
 from coach.observability import audit
 from coach.orchestrator.assembly import (
@@ -55,30 +56,6 @@ _log = logging.getLogger("coach.api")
 # The read-only web UI (T039). Served from the FastAPI app so it is same-origin with the GET
 # API (no CORS) and adds no new data path — it is a static page that calls the GET endpoints.
 _WEB_DIR = Path(__file__).resolve().parents[3] / "web"
-
-
-# --------------------------------------------------------------------------- lazy Bedrock seams
-# Wrapped so importing this module (and `app = create_app()`) never constructs a Bedrock client
-# or requires AWS config — the real client (and its model-id-from-config check) is built on the
-# first call. Tests inject fakes via `AppDeps` and never reach these.
-class _LazyBedrockLLM:
-    def __init__(self) -> None:
-        self._llm: LLM | None = None
-
-    def narrate(self, reason_input: dict, instruction: str) -> str:  # pragma: no cover
-        if self._llm is None:
-            self._llm = BedrockLLM()
-        return self._llm.narrate(reason_input, instruction)
-
-
-class _LazyBedrockEmbeddings:
-    def __init__(self) -> None:
-        self._e: EmbeddingProvider | None = None
-
-    def embed(self, texts: list[str]) -> list[list[float]]:  # pragma: no cover
-        if self._e is None:
-            self._e = BedrockEmbeddings()
-        return self._e.embed(texts)
 
 
 # --------------------------------------------------------------------------- app configuration
@@ -97,13 +74,17 @@ class AppDeps:
 
 
 def default_deps() -> AppDeps:
-    """Production defaults — Bedrock (lazy) + the configured DB path (model id from config)."""
+    """Default wiring + the configured DB path. The LLM / embeddings provider is chosen by the
+    single factory: real Bedrock IFF its model id is configured, else the deterministic OFFLINE
+    provider — so the server runs fully offline by default (no AWS) and only calls Bedrock when
+    explicitly configured (model id from config). Both Bedrock clients construct lazily, so this
+    never makes a network call at import time."""
     s = get_settings()
     return AppDeps(
         db_path=s.db_path,
         settings=s,
-        llm=_LazyBedrockLLM(),
-        embedder=_LazyBedrockEmbeddings(),
+        llm=make_llm(s),
+        embedder=make_embedder(s),
     )
 
 
