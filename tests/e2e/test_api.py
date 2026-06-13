@@ -71,11 +71,17 @@ def client(db_path):
 
 
 # --------------------------------------------------------------- read-only surface (F6 replaced)
-def test_only_get_routes_are_exposed(client):
-    """No POST/PUT/PATCH/DELETE (or any write/action) route exists — suggestion-only (FR-011)."""
+def test_only_reads_and_the_close_capture_write_are_exposed(client):
+    """The surface is read-only EXCEPT the one CLOSE-capture write, which RECORDS the DM's own
+    observations (not an autonomous action — FR-011). The only non-GET route allowed is
+    `POST /api/brief/{rep_id}/close`; nothing else may expose a write/action verb."""
     for route in client.app.routes:
         verbs = (getattr(route, "methods", None) or set()) - {"HEAD", "OPTIONS"}
-        assert verbs <= {"GET"}, f"{getattr(route, 'path', route)} exposes non-GET {verbs}"
+        path = getattr(route, "path", "")
+        if path == "/api/brief/{rep_id}/close":
+            assert verbs == {"POST"}, f"{path} should be POST-only, got {verbs}"
+        else:
+            assert verbs <= {"GET"}, f"{path} exposes non-GET {verbs}"
 
 
 # ----------------------------------------------------------------------------- whoami / identity

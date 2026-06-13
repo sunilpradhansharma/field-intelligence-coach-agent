@@ -28,12 +28,16 @@ import logging
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
 
+from coach.components.close_capture import draft_close_record
 from coach.components.ranking import rank_reps
+from coach.components.theme_aggregation import aggregate_themes
 from coach.config.settings import Settings, get_settings
 from coach.data_access.interface import AccessContext, ScopeError
 from coach.data_access.notes_retriever import NotesRetriever
@@ -41,7 +45,7 @@ from coach.data_access.sqlite_store import SqliteStore
 from coach.llm.client import LLM
 from coach.llm.embeddings import EmbeddingProvider
 from coach.llm.factory import make_embedder, make_llm
-from coach.llm.narrate import narrate_rankings
+from coach.llm.narrate import narrate_rankings, narrate_themes
 from coach.observability import audit
 from coach.orchestrator.assembly import (
     PENDING_PLACEHOLDERS,
@@ -49,7 +53,7 @@ from coach.orchestrator.assembly import (
     assert_narrated,
 )
 from coach.orchestrator.brief_graph import build_brief
-from coach.schemas import RepRanking, Role
+from coach.schemas import CloseRecord, RepRanking, Role
 
 _log = logging.getLogger("coach.api")
 
@@ -160,6 +164,20 @@ def _assert_rankings_narrated(rankings: list[RepRanking]) -> None:
         raise BriefNotNarratedError(
             "narrate-before-expose: un-narrated ranking(s): " + ", ".join(bad)
         )
+
+
+# ------------------------------------------------------------------ CLOSE capture request body
+class CloseRequest(BaseModel):
+    """The DM's CLOSE input. Either a `transcript` (the typed/spoken path — structured offline by
+    the existing `draft_close_record`, with `observations` kept VERBATIM) OR already-structured
+    fields. The assistant only RECORDS the DM's own words; it takes no autonomous action."""
+
+    transcript: str | None = None
+    observations: str | None = None
+    agreed_actions: list[str] = Field(default_factory=list)
+    observe_next: list[str] = Field(default_factory=list)
+    account_id: str | None = None
+    date: str | None = None  # ISO timestamp; defaults to now (UTC) when omitted
 
 
 # ----------------------------------------------------------------------- stale-schema guard
@@ -286,6 +304,64 @@ def create_app(deps: AppDeps | None = None) -> FastAPI:
             accounts_count=len(brief.accounts),
         )
         return brief.model_dump()
+
+    @app.get("/api/themes")
+    def get_themes(
+        ctx: AccessContext = Depends(get_access_context),
+        resources: RequestResources = Depends(get_resources),
+        deps: AppDeps = Depends(get_deps),
+    ) -> dict:
+        """Phase 7 / capability #6 — the leadership theme aggregation (patterns + counts ONLY).
+
+        READ-scope RBAC: `aggregate_themes` raises `ScopeError` for any caller below region scope
+        (a DM), which the app maps to the SAME `403` as everything else — indistinguishable from
+        not-found. The component is structurally aggregate-only (no rep-identity field), so the
+        response carries themes/counts/shares but never a named or identifiable rep. The LLM only
+        narrates the wording (offline by default via the factory)."""
+        aggregate = aggregate_themes(ctx, resources.store, deps.settings)  # ScopeError -> 403
+        narrated = narrate_themes(aggregate.themes, deps.llm)
+        aggregate = aggregate.model_copy(update={"themes": narrated})
+        audit.audit("get_themes", ctx, theme_count=len(narrated), rep_count=aggregate.rep_count)
+        return aggregate.model_dump()
+
+    @app.post("/api/brief/{rep_id}/close")
+    def save_close(
+        rep_id: str,
+        body: CloseRequest,
+        ctx: AccessContext = Depends(get_access_context),
+        resources: RequestResources = Depends(get_resources),
+        deps: AppDeps = Depends(get_deps),
+    ) -> dict:
+        """Phase 10 / capability #2 — record the DM's own CLOSE note after a coaching ride.
+
+        This is the ONE write the API exposes, and it goes ONLY through the existing single door
+        `save_close_record` (writer-scope RBAC: a DM may write only within their own scope; an
+        out-of-scope OR non-existent rep raises `ScopeError` -> the same `403`). It RECORDS the
+        DM's own input — not an autonomous action (FR-011). The transcript path structures the note
+        offline via `draft_close_record` with `observations` kept VERBATIM (never LLM-altered);
+        the structured path builds the record directly. The saved note flows back through the
+        existing scoped + PRP-scrubbed readback (ride-along prep), so the loop closes (ADR 0002)."""
+        when = body.date or datetime.now(UTC).isoformat()
+        if body.transcript and body.transcript.strip():
+            # Offline structuring (factory LLM): observations stay the DM's verbatim transcript;
+            # the LLM only extracts the agreed-actions / observe-next the DM actually stated.
+            record = draft_close_record(
+                body.transcript, deps.llm, rep_id=rep_id, date=when, account_id=body.account_id
+            )
+        elif body.observations and body.observations.strip():
+            record = CloseRecord(
+                rep_id=rep_id,
+                date=when,
+                observations=body.observations,
+                agreed_actions=body.agreed_actions,
+                observe_next=body.observe_next,
+                account_id=body.account_id,
+            )
+        else:
+            raise HTTPException(status_code=422, detail="provide a transcript or observations")
+        saved = resources.store.save_close_record(ctx, record)  # writer-scope RBAC -> 403
+        audit.audit("save_close", ctx, rep_id=rep_id, session_id=saved.session_id)
+        return {"synthetic": True, "saved": saved.model_dump()}
 
     # --------------------------------------------------------------------- the web UI (T039)
     @app.get("/", response_class=HTMLResponse)

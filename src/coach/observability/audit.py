@@ -58,9 +58,12 @@ SAFE_AUDIT_FIELDS: frozenset[str] = frozenset(
         "brief_id",
         "selected_rep_id",
         "rep_id",
+        "session_id",  # opaque CLOSE-note id (like brief_id/rep_id — not a name or free text)
         "limit",
         "ranked_count",
         "accounts_count",
+        "theme_count",  # count of aggregated themes (metadata, no identity)
+        "rep_count",  # count of in-scope reps (metadata, no identity)
         "status",
         "synthetic",
     }

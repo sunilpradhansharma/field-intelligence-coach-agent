@@ -68,10 +68,16 @@ def test_page_is_read_only_and_calls_only_get_endpoints(client):
 
 
 def test_ui_layer_exposes_no_write_route(client):
-    # The whole app surface (page + API) stays GET-only — the UI adds no mutation route.
+    # The UI page adds NO mutation route. The only non-GET route in the whole surface is the
+    # backend CLOSE-capture write (`POST /api/brief/{rep_id}/close`), which records the DM's own
+    # observations — the page itself stays read-only (verified above by the body scan).
     for route in client.app.routes:
         verbs = (getattr(route, "methods", None) or set()) - {"HEAD", "OPTIONS"}
-        assert verbs <= {"GET"}, f"{getattr(route, 'path', route)} exposes non-GET {verbs}"
+        path = getattr(route, "path", "")
+        if path == "/api/brief/{rep_id}/close":
+            assert verbs == {"POST"}, f"{path} should be POST-only, got {verbs}"
+        else:
+            assert verbs <= {"GET"}, f"{path} exposes non-GET {verbs}"
 
 
 # ------------------------------------------------- FR-010: a reason for EVERY brief section
