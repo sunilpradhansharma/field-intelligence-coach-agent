@@ -127,6 +127,21 @@ def _default_summit_formulas() -> dict[str, SummitFormula]:
     }
 
 
+@dataclass(frozen=True)
+class SuccessMeasure:
+    """The covariant analysis (Phase 9 / capability #4) "success" measure.
+
+    **DEFAULT ASSUMPTION to confirm with the business (open question).** Default: a "winning"
+    (account, brand) is one with **RISING share AND performance on/above target**. It is tunable
+    via config WITHOUT any code change — set `min_share_trend` ("rising" = share_trend strictly
+    above this) and whether performance must be on/above target. The analysis engine
+    (`components/covariant.py`) never hard-codes a hidden definition; it reads this measure.
+    """
+
+    min_share_trend: float = 0.0  # "rising" share = share_trend strictly greater than this
+    require_on_or_above_target: bool = True  # performance must be 'on' or 'over'
+
+
 # Shown when no signal clears its trigger threshold (a low-priority, no-gap default focus).
 DEFAULT_FOCUS_AREA = "No high-priority coaching gap — reinforce current strengths"
 
@@ -232,6 +247,22 @@ class Settings:
     # How many top declining (account, brand) rows a rep's Summit insight targets.
     summit_max_targets: int = field(
         default_factory=lambda: int(os.getenv("COACH_SUMMIT_MAX_TARGETS", "3"))
+    )
+
+    # Covariant analysis (Phase 9 / capability #4). The "success" measure is a labeled DEFAULT
+    # ASSUMPTION to confirm (see `SuccessMeasure`). The spend threshold binarizes the
+    # 'spend_support' behavior variable (a placeholder proxy for "use of approved assets/spend").
+    # The min-rows / min-support guards keep thin data HONEST (no association is claimed below
+    # them). All config-visible + env-overridable; none hard-coded in the analysis body.
+    success_measure: SuccessMeasure = field(default_factory=SuccessMeasure)
+    covariant_spend_threshold: float = field(
+        default_factory=lambda: float(os.getenv("COACH_COVARIANT_SPEND_THRESHOLD", "4000"))
+    )
+    covariant_min_rows: int = field(
+        default_factory=lambda: int(os.getenv("COACH_COVARIANT_MIN_ROWS", "8"))
+    )
+    covariant_min_support: int = field(
+        default_factory=lambda: int(os.getenv("COACH_COVARIANT_MIN_SUPPORT", "3"))
     )
 
 

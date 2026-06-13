@@ -397,6 +397,46 @@ class SummitInsight(BaseModel):
     synthetic: bool = True
 
 
+# -------------------------------------------- covariant analysis (Phase 9 / capability #4)
+class CovariantVariableFinding(BaseModel):
+    """One behavior variable's TRANSPARENT association with the success measure: the success rate
+    when the variable is high vs low, with the supporting counts (a plain rate/lift, no model)."""
+
+    variable: str  # the behaviour variable (e.g. "call_activity", "spend_support")
+    n_high: int  # (account, brand) rows where the variable is high
+    success_rate_high: float  # success rate among those rows (0..1)
+    n_low: int  # rows where the variable is low
+    success_rate_low: float
+    lift: float  # success_rate_high - success_rate_low (positive = associates with success)
+
+
+class CovariantBlend(BaseModel):
+    """The combination of behavior variables with the highest observed success association."""
+
+    variables: list[str]  # the variables that are all true together
+    n: int  # rows where all these variables are true (the support)
+    success_rate: float  # success rate among those rows (0..1)
+
+
+class CovariantAnalysis(BaseModel):
+    """A simple, TRANSPARENT covariant insight (capability #4): which rep-behavior variables
+    associate with the configured success measure, computed DETERMINISTICALLY in code (counts /
+    rates / lift — no black-box model), the LLM only narrates `reason.summary`.
+
+    HONESTY: this is a simple association on SYNTHETIC data; a richer covariant model would need
+    real data. When there is too little data, `insufficient_data` is true and no association is
+    claimed (FR-018). Pure data, suggestion-only (FR-011)."""
+
+    success_measure: str  # human description of the configured success measure (transparency)
+    rows_analyzed: int  # total in-scope (account, brand) rows analyzed
+    success_rate_overall: float  # overall success rate (0..1)
+    variable_findings: list[CovariantVariableFinding]
+    optimal_blend: CovariantBlend | None  # the best-associating combination (None if unsupported)
+    insufficient_data: bool  # true -> too little data; no association claimed
+    reason: Reason  # summary (LLM) + data points (variables, success measure, supporting numbers)
+    synthetic: bool = True
+
+
 # ------------------------------------------------------- synthetic dataset
 class GenerationMeta(BaseModel):
     seed: int

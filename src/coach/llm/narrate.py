@@ -20,6 +20,7 @@ from coach.llm.client import LLM
 from coach.schemas import (
     AccountFocus,
     CoachingFocus,
+    CovariantAnalysis,
     EmptyState,
     Opener,
     RepRanking,
@@ -300,3 +301,36 @@ def narrate_summit(insight: SummitInsight, llm: LLM) -> SummitInsight:
         summary = insight.reason.summary  # schema requires a non-empty summary; keep prior
     new_reason = insight.reason.model_copy(update={"summary": summary})
     return insight.model_copy(update={"reason": new_reason})
+
+
+_COVARIANT_INSTRUCTION = (
+    "Write a short, plain-language insight for a district manager about which rep behaviors tend "
+    "to go with success (e.g. 'reps who do X and Y together succeed more often'). Use ONLY the "
+    "variables, the success measure, and the supporting rates/counts provided — do not invent "
+    "numbers and do not change the finding. If the data is insufficient, say so plainly. One or "
+    "two sentences."
+)
+
+
+def _covariant_input(analysis: CovariantAnalysis) -> dict:
+    """Read-only facts handed to the LLM — the already-computed findings. It may phrase them; it
+    may not alter the variables, the success measure, or the numbers."""
+    return {
+        "success_measure": analysis.success_measure,
+        "rows_analyzed": analysis.rows_analyzed,
+        "success_rate_overall": analysis.success_rate_overall,
+        "insufficient_data": analysis.insufficient_data,
+        "variable_findings": [f.model_dump() for f in analysis.variable_findings],
+        "optimal_blend": analysis.optimal_blend.model_dump() if analysis.optimal_blend else None,
+    }
+
+
+def narrate_covariant(analysis: CovariantAnalysis, llm: LLM) -> CovariantAnalysis:
+    """Return a copy of `analysis` with ONLY `reason.summary` replaced by LLM prose. The variables,
+    the success measure, the findings, the optimal blend, and the data points are preserved by
+    construction (the LLM narrates the finding; it never decides it)."""
+    summary = llm.narrate(_covariant_input(analysis), _COVARIANT_INSTRUCTION).strip()
+    if not summary:
+        summary = analysis.reason.summary  # schema requires a non-empty summary; keep prior
+    new_reason = analysis.reason.model_copy(update={"summary": summary})
+    return analysis.model_copy(update={"reason": new_reason})
