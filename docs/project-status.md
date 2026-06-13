@@ -28,9 +28,11 @@ synthetic.
 **Phases 1–6 are COMPLETE and tested — the MVP (the morning coaching brief) is
 FEATURE-COMPLETE end to end:** synthetic data → RBAC/PRP data-access layer → deterministic
 ranking → the five brief sections → the orchestrated, narrated, validated brief → the read-only
-FastAPI API → the read-only web UI. **Phase 7 (theme aggregation, capability #6) and Phase 8
-(Summit optimization, capability #5) are also DONE.** `pytest` → **154 passed**. Phases 9–10
-(covariant analysis, verbal-feedback / CLOSE) are PLANNED.
+FastAPI API → the read-only web UI. **Phases 7 (theme aggregation, #6), 8 (Summit optimization,
+#5), and 9 (covariant analysis, #4) are also DONE, and Phase 10 (verbal feedback / CLOSE, #2) is
+IN PROGRESS — Step 10a (the text CLOSE write path) is DONE.** `pytest` → **171 passed**. The only
+remaining roadmap work is **Phase 10 Step 10b** (voice capture — Amazon Transcribe + Claude
+structuring).
 
 ### Code (`src/coach/`)
 - **Data-access interface** — `src/coach/data_access/interface.py`: `DataAccess` and
@@ -405,6 +407,67 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
 - **Not built yet (optional next):** surfacing the Summit insight in the brief/API/UI — the
   component + signal integration are done and tested, but no screen/route shows it yet.
 
+### Phase 9 (COMPLETE) — covariant analysis (capability #4) — tasks P9-T1, P9-T2, P9-T3
+(`src/coach/components/covariant.py`, FR-002/FR-010/FR-012/FR-018; ADR 0001-style transparency):
+- **Config-driven "success" measure — a clearly-labeled, tunable ASSUMPTION to confirm.**
+  `config.settings.SuccessMeasure` (default: a (account, brand) "wins" if its share is **rising**
+  and performance is **on/above target**). It is the single visible definition via
+  `meets_success_measure(...)`; the engine never hard-codes a hidden criterion, and the measure is
+  tunable per config (env-overridable) — to be confirmed with the business (§5).
+- **Transparent, deterministic association computed in code — not a black-box model, not
+  LLM-decided.** Across the caller's in-scope (account, brand) rows it computes, as plain
+  counts/rates/lift, each behavior variable's success rate **high vs low** and the **optimal
+  blend** (the variable combination with the highest observed success rate, with a min-support).
+  Two variables, reused with no drift (`call_activity` = calls above `low_call_threshold`;
+  `spend_support` = spend ≥ `covariant_spend_threshold`, a placeholder) and disjoint from the
+  success measure (no leakage). Fully inspectable; no statistical/opaque model.
+- **Insufficient data handled honestly (FR-018).** Below `covariant_min_rows` it returns a clear
+  **insufficient-data** state — no optimal blend, no variable findings, an explicit reason — and
+  never fabricates an association. The output states plainly it is a simple association on
+  **synthetic** data; a richer covariant model needs real data (honesty in the output, not just
+  comments).
+- **Surfaces in the accounts / business-context section** as a `CovariantAnalysis` with a
+  structured `reason` carrying the variables, the success measure used, and the supporting numbers
+  (FR-010). **LLM limited to wording** — `narrate_covariant` is handed the findings only and
+  rewrites only `reason.summary` via `model_copy` (anti-LLM guard asserts the variables, findings,
+  blend, and data points are byte-for-byte unchanged). Reads go **only through the data-access
+  layer** (reusing `compute_rep_signals`; RBAC + PRP hold — PRP rows never enter the analysis).
+  New schemas `CovariantAnalysis` / `CovariantVariableFinding` / `CovariantBlend`; config
+  `SuccessMeasure` + the covariant thresholds.
+- **Not built yet (optional next):** wiring the covariant insight into the live brief/API/UI.
+
+### Phase 10 (IN PROGRESS) — verbal feedback / CLOSE capture (capability #2)
+**Step 10a — the CLOSE write path (text) — tasks P10-T1…P10-T4 — DONE**
+(`CloseRecord` + `DataAccess.save_close_record`, FR-011/FR-013/FR-014/FR-020; **ADR 0002**):
+- **The first WRITE path, through the single door with writer-scope RBAC.** `save_close_record`
+  is a method on the data-access layer (not a bypass); `require_rep_in_scope` runs **before** any
+  write (reusing the existing scope helper), so a caller may write a CLOSE record ONLY for a rep
+  in their own scope. An out-of-scope **or** non-existent rep raises the same `ScopeError`
+  (indistinguishable from not-found), exactly like a read. `region`/`all` writers within scope
+  succeed. The author identity/scope is **stamped from the authenticated context** (cannot be
+  spoofed).
+- **`CloseRecord` schema** — rep_id, a **collision-free** unique `session_id` (defaults to a fresh
+  id so two records can never overwrite / cross-contaminate; injectable for tests), date,
+  observations (non-empty), agreed_actions, observe_next, optional `account_id` (the HCP discussed,
+  for PRP on readback), and the stamped author. Malformed records are rejected (validation).
+- **The loop closes.** A saved record is persisted as a coaching note in the **same
+  `coaching_sessions` table the readback reads** (no second path), so the next **ride-along prep**
+  surfaces its observations, agreed actions, and observe-next via the normal scoped + PRP-scrubbed
+  read. A new nullable `account_id` column on `coaching_sessions` / `CoachingSession` carries the
+  PRP tie (NULL for seed notes — the retriever's positional tie is preserved).
+- **Full PRP scrub on readback (ADR 0002).** On readback the note flows through the existing
+  retriever (RBAC + PRP guard); a note tied to a PRP account is dropped at query time, and because
+  ride-along prep derives its **whole** output (free text AND structured agreed_actions /
+  observe_next AND the session_id) from the retriever-gated `surfaceable` set, the **entire** PRP
+  record is scrubbed at every scope level — not just its body.
+- **Records the DM's own observations — not autonomous action (FR-011).** The write stores the
+  human's input verbatim (no generation/alteration); the system never acts on it.
+
+**Step 10b — voice capture (Amazon Transcribe + Claude structuring) — task P10-T5 — NOT built**
+(the only remaining roadmap work): turn a post-ride voice recording into the `CloseRecord` text,
+which then flows through the SAME Step 10a write path (writer-scope RBAC + PRP-on-readback). Voice
+is the input method only — it does not change the write/RBAC/PRP rules.
+
 ### Tests
 - `tests/unit/test_data_access.py` (**T018**) — shape/counts, signal variety, determinism
   (same seed → identical data), synthetic-only provenance, store round-trip, plus the
@@ -494,11 +557,32 @@ interfaces; the **same query-time RBAC + PRP filter must be re-applied** there (
   guard**; **RBAC + PRP** (PRP rows scrubbed; a DM aggregates only their own district); and the
   **`recovery_fraction`** hardening (default 1.0 preserves prior behavior; a different value
   changes the lift predictably; two teams with different recovery → different results).
+- `tests/component/test_covariant.py` (**P9-T1/T2/T3**, 9 tests) — Phase 9: a deterministic
+  **golden** (seed 42, DM D1 — rows/overall/per-variable rates+lift/optimal blend); determinism;
+  **config-driven success measure** (relaxing it changes the result predictably; `meets_success_measure`
+  gates verified); **explainability** (the reason carries the variables, the success measure, and
+  the numbers + the honesty note); **insufficient-data honesty** (a thin slice → a clear state, no
+  association); **RBAC + PRP** (PRP rows scrubbed; a DM aggregates only their district, "all" reads
+  more); and the **anti-LLM guard**.
+- `tests/e2e/test_close_record.py` (**P10-T1…P10-T4 / Step 10a**, 8 tests) — Phase 10: the write
+  stamps the author from context; **writer-scope RBAC** (out-of-scope + not-found → `ScopeError`,
+  indistinguishable); region/all writers within scope; **the loop closes** (a saved record surfaces
+  in the next ride-along prep via the normal readback); **full PRP scrub on readback** — a PRP-tied
+  close note's **free text AND structured fields (agreed_actions, observe_next) AND its session_id**
+  never surface at any scope (ADR 0002); **collision-free ids** (two records → distinct rows, no
+  cross-contamination); validation rejects a malformed record; and the write **records the DM's
+  input verbatim** (no autonomous action).
 - Reviewed by the **constitution-guardian** subagent — Phases 1, 2, 3, **all four Phase 4
   brief-section components**, **the Phase 5 orchestrator + assembly**, **the Step 5b read-only
-  API**, **the Phase 6 web UI**, **the Phase 7 theme aggregation**, **and the Phase 8 Summit
-  optimization** all **COMPLIANT**
-  (Phase 7: patterns/counts-only enforced structurally + small-cell suppression; RBAC region/all
+  API**, **the Phase 6 web UI**, **the Phase 7 theme aggregation**, **the Phase 8 Summit
+  optimization**, **the Phase 9 covariant analysis**, **and the Phase 10 Step 10a CLOSE write
+  path** all **COMPLIANT** (Phase 9: config-driven labeled success measure, transparent
+  deterministic association in code — not a black-box model, not LLM-decided — thin data handled
+  honestly, reads only through the data-access layer, anti-LLM guard. Step 10a: write through the
+  single door with writer-scope RBAC, out-of-scope rejected like not-found, the WHOLE record —
+  free text + structured fields + id — PRP-scrubbed on readback, collision-free ids, records the
+  DM's input verbatim — no autonomous action.
+  Phase 7: patterns/counts-only enforced structurally + small-cell suppression; RBAC region/all
   with DM rejected; themes from the shared signals — no drift; aggregation in code, LLM
   wording-only; reads only through the data-access layer. Phase 8: per-team Summit formula
   config-driven + labeled placeholder, no hard-coded numbers; the what-if lift computed
@@ -642,8 +726,9 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
   - **Phase 8 — the Summit `recovery_fraction` is an ASSUMPTION to tune** (default **1.0** = full
     recovery; per-team config, env `COACH_SUMMIT_RECOVERY_FRACTION`). A full recovery may be
     optimistic — confirm/tune the per-team value with the business.
-  - **Phase 9 — the covariant "success" measure is still TO BE DEFINED** (open question; the
-    covariant analysis is computed against it). Needed before Phase 9 is built.
+  - **Phase 9 — the covariant "success" measure is an ASSUMPTION to confirm.** Phase 9 ships with
+    a clearly-labeled config DEFAULT (`SuccessMeasure`: rising share + on/above target); confirm /
+    tune the real definition with the business (the analysis is computed against it).
 - **F6 / F8 superseded → now SATISFIED for the read-only MVP API (Step 5b).** The old
   read-only / read-only-RBD guard tests were recorded as **SUPERSEDED** (region-level roles now
   have full write/action access). For the current **entirely read-only** API they are now met
@@ -702,16 +787,17 @@ constitution → specify → clarify → plan → tasks → analyze. The feature
 | **Phase 6** | **UI** (T039) — minimal read-only web page rendering the 5 sections + each reason; seeded-user selector (API enforces scope); per-brand accounts + mismatch; clean 403/empty states; offline demo server | **DONE** |
 | **Phase 7** | **Theme aggregation** (capability #6) — leadership view of themes across reps: **patterns/counts only, never named individuals** (structural + small-cell suppression), **RBAC-scoped** (region/all only; DM rejected), deterministic from the shared signals, LLM wording-only (P7-T1/T2/T3) | **DONE** (no leadership UI yet) |
 | **Phase 8** | **Summit optimization** (capability #5) — Summit / IC-plan lift as a new ranking signal **computed in code** (deterministic; per-team **config placeholder** formula + tunable `recovery_fraction`); folded into the normalized rollup, **OFF by default**; the LLM never scores it (P8-T1/T2) | **DONE** (no Summit UI yet) |
-| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (deterministic, not LLM-decided); needs a defined "success" measure | **PLANNED** (next) |
-| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2) — **record** the DM's post-ride observations (first **write** path): same door, writer-scope RBAC, PRP-scrubbed on readback (ADR 0002) | **PLANNED** |
+| **Phase 9** | **Covariant analysis** (capability #4) — deeper accounts insight **computed in code** (transparent counts/rates/lift, not a black-box model, not LLM-decided); **config-driven** success measure (labeled assumption); thin data handled honestly; reads through the single door (P9-T1/T2/T3) | **DONE** (no covariant UI yet) |
+| **Phase 10** | **Verbal feedback / CLOSE capture** (capability #2). **Step 10a** ✅ — the text **CLOSE write path** (P10-T1…T4): first WRITE through the single door, writer-scope RBAC (out-of-scope rejected like not-found), the loop closes into the next ride-along prep, **full PRP scrub on readback** (structured fields + free text; ADR 0002), collision-free ids, records the DM's input verbatim. **Step 10b** ⏳ — voice capture (Transcribe + Claude structuring), P10-T5 | **IN PROGRESS** (Step 10a done; Step 10b next) |
 
-> ✅ **MVP FEATURE-COMPLETE (Phases 1–6) + Phases 7–8 DONE.** The morning coaching brief runs
-> end to end (**synthetic data → RBAC/PRP data-access layer → deterministic ranking → the five
-> brief sections → the orchestrated, narrated, validated brief → the read-only API → the
-> read-only web UI**), and the first two post-MVP capabilities — #6 (leadership theme roll-up)
-> and #5 (Summit optimization) — are built. `pytest` → **154 passed**. **Phases 9–10
-> (capabilities #4/#2) are PLANNED**, with **Phase 9 (covariant analysis) the immediate next
-> action**; the OPEN items (§5) are enhancements / next capabilities, **not gaps in the MVP**.
+> ✅ **MVP FEATURE-COMPLETE (Phases 1–6) + Phases 7, 8, 9 DONE + Phase 10 Step 10a DONE.** The
+> morning coaching brief runs end to end (**synthetic data → RBAC/PRP data-access layer →
+> deterministic ranking → the five brief sections → the orchestrated, narrated, validated brief →
+> the read-only API → the read-only web UI**), and the post-MVP capabilities are built: #6
+> (leadership theme roll-up), #5 (Summit optimization), #4 (covariant analysis), and #2's text
+> **CLOSE write path** (Step 10a). `pytest` → **171 passed**. The **only remaining roadmap work is
+> Phase 10 Step 10b** — voice capture (Amazon Transcribe + Claude structuring). The OPEN items
+> (§5) are enhancements / next capabilities / assumptions to confirm, **not gaps**.
 
 ### Diagrams
 
@@ -737,9 +823,10 @@ inline `<svg>` code):
    the **orchestrator + assembly** (`src/coach/orchestrator/`) + the **read-only API**
    (`src/coach/api/app.py`), **audit/logging** (`src/coach/observability/audit.py`), the
    **web UI** (`web/index.html`), the **offline demo server** (`src/coach/api/demo.py`), the
-   **Phase 7 theme aggregation** (`src/coach/components/theme_aggregation.py`), and the
-   **Phase 8 Summit optimization** (`src/coach/components/summit.py`),
-   and run `uv run pytest -q` to confirm the suite is green (**154 passing**).
+   **Phase 7 theme aggregation** (`theme_aggregation.py`), **Phase 8 Summit** (`summit.py`),
+   **Phase 9 covariant** (`covariant.py`), and the **Phase 10 Step 10a CLOSE write path**
+   (`DataAccess.save_close_record` + `CloseRecord`),
+   and run `uv run pytest -q` to confirm the suite is green (**171 passing**).
 
 **Run it locally:**
 - **Offline demo (no AWS, recommended for a walkthrough):** `uv run uvicorn coach.api.demo:app
@@ -750,22 +837,22 @@ inline `<svg>` code):
   `AWS_REGION` / `BEDROCK_EMBED_MODEL_ID` set and a seeded DB
   (`uv run python -m coach.synthetic.generate`).
 
-**Immediate next action (MVP done; Phases 7–8 done):**
-1. **Phase 9 — covariant analysis (capability #4)** is the next build: deeper insight in the
-   accounts section — which factors move together with results — **computed in code,
-   deterministic and explainable, NOT LLM-decided** (the LLM only narrates the structured
-   finding); every finding carries a `reason`. **First define the "success" measure** the
-   analysis is computed against — an **open question** that must be settled before building (§5).
-   Phase 10 (verbal-feedback / CLOSE — the first **write** path, writer-scope RBAC + PRP-scrubbed
-   on readback per ADR 0002) follows.
-2. **Optional next for Phases 7–8:** surface the **theme aggregation** (Phase 7) and the **Summit
-   insight** (Phase 8) in a UI / API endpoint — both components are done and tested, but no
-   screen/route exposes them yet. *(Open assumptions to confirm with the business: the Summit
-   per-team placeholder formula and the `recovery_fraction` — §5.)*
+**Immediate next action (MVP done; Phases 7–9 done; Phase 10 Step 10a done):**
+1. **Phase 10 — Step 10b — voice capture (capability #2)** is the only remaining roadmap build:
+   **Amazon Transcribe** (model/region from config; lazy boto3; a deterministic offline fake for
+   tests) turns a post-ride voice recording into the `CloseRecord` text — optionally structured by
+   **Claude** into observations / agreed-actions / observe-next — which then flows through the
+   SAME Step 10a write path. **Voice is the input method only; it does not change the
+   write/RBAC/PRP rules** (writer-scope RBAC + full PRP scrub on readback, ADR 0002).
+2. **Optional next for Phases 7–9:** surface the **theme aggregation** (Phase 7), the **Summit
+   insight** (Phase 8), and the **covariant analysis** (Phase 9) in a UI / API endpoint — the
+   components are done and tested, but no screen/route exposes them yet. *(Open assumptions to
+   confirm with the business: the Summit per-team placeholder formula + `recovery_fraction`, and
+   the covariant `SuccessMeasure` — §5.)*
 3. **Prepare the demo for the business** — run the offline demo (above), walk the five sections
    and the visible reasons, and use it to gather feedback (and to drive the workshop + the
    config tuning in §5).
-3. **Diagrams refreshed — DONE.** `README.md` and `docs/technical-architecture.md` now embed
+4. **Diagrams refreshed — DONE.** `README.md` and `docs/technical-architecture.md` now embed
    the four diagrams in [`docs/diagrams/`](diagrams/) as images (architecture, flow-detailed,
    ranking-rollup, sequence); the old "orchestrator / API / UI planned" diagram captions are
    gone. See the **Diagrams** subsection in §6.
