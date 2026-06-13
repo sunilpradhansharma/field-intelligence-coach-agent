@@ -240,6 +240,44 @@
 
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   .stagger > * { animation: rise .5s both; }
+
+  /* ---- view toggle: Coaching brief | Leadership themes (leadership scope only) ---- */
+  .viewbar { display: flex; align-items: center; gap: 16px; margin: -12px 0 26px; animation: rise .4s both; }
+  .viewbar .lbl { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+
+  /* ---- leadership themes (patterns + counts only — never individuals) ---- */
+  .themes-intro { font-family: "Newsreader", Georgia, serif; font-style: italic; color: var(--ink-soft); margin: 2px 0 22px; font-size: 16px; }
+  .theme-head { font-family: "Fraunces", serif; font-weight: 600; font-size: 19px; margin: 0 0 6px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .theme-count { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--accent); font-weight: 600; }
+  .theme-share { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); }
+  .theme-suppressed { font-family: "JetBrains Mono", monospace; font-size: 10.5px; letter-spacing: .04em; color: var(--gold); background: var(--gold-bg); border: 1px solid #e6d3a0; border-radius: 5px; padding: 2px 8px; }
+
+  /* ---- record close panel (the one write — records the DM's own observations) ---- */
+  .close-panel { background: var(--card); border: 1px solid var(--line-2); border-radius: 11px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .close-panel textarea {
+    width: 100%; min-height: 94px; resize: vertical; display: block;
+    font-family: "Newsreader", Georgia, serif; font-size: 15.5px; color: var(--ink); line-height: 1.45;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px;
+  }
+  .close-panel textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px #f6e7e2; }
+  .close-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .btn {
+    font-family: "JetBrains Mono", monospace; font-size: 12.5px; letter-spacing: .03em;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+    padding: 9px 16px; border-radius: 8px; cursor: pointer; transition: all .16s ease;
+  }
+  .btn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  .btn.ghost:hover:not(:disabled) { background: var(--paper-2); color: var(--ink); }
+  .close-hint { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); }
+  .saved-ok { color: var(--green); font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600; }
+  .draft-field { margin-top: 13px; }
+  .draft-field .k { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+  .draft-field .v { font-size: 15.5px; color: var(--ink); line-height: 1.45; }
+  .draft-field ul { margin: 4px 0 0; padding-left: 18px; }
+  .draft-field li { font-size: 14.5px; color: var(--ink-soft); margin: 2px 0; }
+  .draft-field .none { color: var(--muted); font-style: italic; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -262,7 +300,13 @@
     </div>
   </div>
 
-  <div class="grid">
+  <!-- View toggle — shown ONLY for leadership scope (region / all). Hidden entirely for a DM. -->
+  <div class="viewbar" id="viewbar" hidden>
+    <span class="lbl">View</span>
+    <div class="seg" id="viewseg" role="group" aria-label="Select view"></div>
+  </div>
+
+  <div class="grid" id="briefview">
     <aside class="rail">
       <div class="rail-head">
         <h2>Who to ride with</h2>
@@ -275,6 +319,9 @@
       <div class="placeholder">Select a rep to open their full coaching brief.</div>
     </main>
   </div>
+
+  <!-- Leadership themes view (Phase 7) — aggregate patterns/counts only, never named individuals. -->
+  <section class="brief" id="themesview" aria-live="polite" hidden></section>
 
   <div class="foot">
     <span class="syn" id="synflag">● synthetic data</span>
@@ -304,6 +351,9 @@ const SCOPE_TERR = { district: d => d.district_id, region: d => d.region_id, all
 
 let currentUser = USERS[0].id;
 let currentRep = null;
+let currentScopeLevel = null;          // from /api/whoami — gates the leadership themes view
+let currentView = "brief";             // "brief" | "themes"
+const LEADERSHIP = new Set(["region", "all"]);
 
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, txt) => { const n = document.createElement(tag); if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
@@ -313,6 +363,14 @@ const headers = () => ({ "X-User-Id": currentUser });
 
 async function api(path) {
   const res = await fetch(path, { headers: headers() });
+  return { status: res.status, ok: res.ok, body: res.ok ? await res.json() : null };
+}
+async function apiPost(path, payload) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   return { status: res.status, ok: res.ok, body: res.ok ? await res.json() : null };
 }
 
@@ -365,11 +423,43 @@ function renderUserSeg() {
 async function loadScope() {
   const r = await api("/api/whoami");
   const chip = $("#scopechip");
-  if (!r.ok) { chip.hidden = true; return; }
+  if (!r.ok) { chip.hidden = true; currentScopeLevel = null; updateViewToggle(); return; }
   const d = r.body;
   chip.hidden = false;
   $("#scoperole").textContent = d.role.replace(/_/g, " ");
   $("#scopeterr").textContent = (SCOPE_TERR[d.scope_level] ? SCOPE_TERR[d.scope_level](d) : d.scope_level) || d.scope_level;
+  currentScopeLevel = d.scope_level;
+  updateViewToggle();
+}
+
+/* ---- view toggle (Coaching brief | Leadership themes) — leadership scope only ---- */
+const VIEWS = [
+  { id: "brief",  label: "Coaching brief" },
+  { id: "themes", label: "Leadership themes" },
+];
+function updateViewToggle() {
+  const bar = $("#viewbar");
+  const isLeadership = LEADERSHIP.has(currentScopeLevel);
+  bar.hidden = !isLeadership;            // a DM never sees the toggle at all
+  if (!isLeadership && currentView !== "brief") selectView("brief");  // force back to brief
+  renderViewSeg();
+}
+function renderViewSeg() {
+  const seg = $("#viewseg"); seg.innerHTML = "";
+  for (const v of VIEWS) {
+    const b = el("button", null, v.label);
+    b.setAttribute("aria-pressed", String(v.id === currentView));
+    b.onclick = () => selectView(v.id);
+    seg.appendChild(b);
+  }
+}
+function selectView(view) {
+  currentView = view;
+  renderViewSeg();
+  const onThemes = view === "themes";
+  $("#briefview").hidden = onThemes;
+  $("#themesview").hidden = !onThemes;
+  if (onThemes) loadThemes();
 }
 
 /* ---- section 1: ranked reps ---- */
@@ -396,6 +486,45 @@ async function loadReps() {
     list.appendChild(card);
   });
   if (!reps.length) list.appendChild(emptyLine("No reps in your scope."));
+}
+
+/* ---- leadership themes (Phase 7): aggregate patterns + counts ONLY, never individuals ---- */
+async function loadThemes() {
+  const view = $("#themesview"); view.innerHTML = "";
+  view.appendChild(el("div", "placeholder", "Aggregating coaching themes…"));
+  const r = await api("/api/themes");
+  view.innerHTML = "";
+  if (r.status === 403) {
+    // Leadership-only — never reveal anything else (a DM that reaches here just sees this).
+    view.appendChild(notice("Not available for your role", "Theme aggregation is a leadership view.", true));
+    return;
+  }
+  if (!r.ok) { view.appendChild(notice("Themes unavailable", "Please try again.", true)); return; }
+  renderThemes(view, r.body);
+}
+
+function renderThemes(root, t) {
+  const sec = el("section", "sec");
+  sec.appendChild(sectionHead("∑", "Leadership themes", "patterns across reps"));
+  sec.appendChild(el("div", "themes-intro",
+    `Common coaching themes across ${t.rep_count} rep(s) in scope — patterns and counts only, never named individuals.`));
+  const themes = t.themes || [];
+  if (!themes.length) { sec.appendChild(emptyLine("No themes to aggregate in your scope yet.")); root.appendChild(sec); return; }
+  themes.forEach((th, i) => {
+    const it = el("div", "item"); it.style.animationDelay = (i * 40) + "ms";
+    const head = el("div", "theme-head");
+    head.appendChild(document.createTextNode(th.theme));
+    if (th.suppressed) {
+      head.appendChild(el("span", "theme-suppressed", "below reporting threshold"));
+    } else {
+      head.appendChild(el("span", "theme-count", `${th.rep_count} rep(s)`));
+      if (th.rep_share != null) head.appendChild(el("span", "theme-share", `${(th.rep_share * 100).toFixed(0)}% of scope`));
+    }
+    it.appendChild(head);
+    if (th.reason) it.appendChild(reasonBlock(th.reason, { signals: false }));
+    sec.appendChild(it);
+  });
+  root.appendChild(sec);
 }
 
 /* ---- the full brief ---- */
@@ -480,6 +609,69 @@ function renderBrief(root, b) {
   s5.appendChild(sectionHead("05", "Suggested opener", "editable suggestion"));
   s5.appendChild(renderOpener(b.opener));
   root.appendChild(s5);
+
+  // ---- 06 Record close (the one write — records the DM's own post-ride observations) ----
+  const s6 = el("section", "sec");
+  s6.appendChild(sectionHead("06", "Record close", "your observations"));
+  s6.appendChild(renderClosePanel(b.selected_rep_id));
+  root.appendChild(s6);
+}
+
+/* ---- Record close panel (Phase 10): the DM types/pastes observations; the close route
+   structures them (observations stay VERBATIM) AND saves through the single door. We then show
+   what was saved for review, plus the reload hint. No client-side structuring or auto-action. ---- */
+function renderClosePanel(repId) {
+  const panel = el("div", "close-panel");
+  panel.appendChild(el("div", "close-hint",
+    "Type or paste your post-ride observations. They are recorded as your own words; the assistant only structures + files them."));
+  const ta = el("textarea");
+  ta.setAttribute("aria-label", "Post-ride observations");
+  ta.placeholder = "e.g. Strong opening today. Agreed to roleplay objection handling before next ride…";
+  panel.appendChild(ta);
+
+  const actions = el("div", "close-actions");
+  const btn = el("button", "btn", "Structure & save");
+  const status = el("span", "close-hint");
+  actions.appendChild(btn);
+  actions.appendChild(status);
+  panel.appendChild(actions);
+  const result = el("div"); panel.appendChild(result);
+
+  btn.onclick = async () => {
+    const text = ta.value.trim();
+    if (!text) { status.textContent = "Enter some observations first."; return; }
+    btn.disabled = true; status.textContent = "Saving…"; result.innerHTML = "";
+    const r = await apiPost("/api/brief/" + encodeURIComponent(repId) + "/close", { transcript: text });
+    btn.disabled = false;
+    if (r.status === 403) { status.textContent = ""; result.appendChild(notice("Not allowed for your scope", "You can only record a close for a rep in your territory.", true)); return; }
+    if (!r.ok) { status.textContent = "Could not save — please try again."; return; }
+    status.innerHTML = '<span class="saved-ok">● Saved</span>';
+    result.appendChild(renderSavedClose(r.body.saved));
+  };
+  return panel;
+}
+
+function renderSavedClose(saved) {
+  const box = el("div");
+  const field = (label, valueNode) => {
+    const f = el("div", "draft-field");
+    f.appendChild(el("div", "k", label));
+    f.appendChild(valueNode);
+    return f;
+  };
+  const listOrNone = items => {
+    if (items && items.length) {
+      const ul = el("ul");
+      for (const x of items) ul.appendChild(el("li", null, x));
+      return ul;
+    }
+    return el("div", "none", "Not recorded.");
+  };
+  box.appendChild(field("Observations (verbatim)", el("div", "v", saved.observations)));
+  box.appendChild(field("Agreed actions", listOrNone(saved.agreed_actions)));
+  box.appendChild(field("Observe next", listOrNone(saved.observe_next)));
+  box.appendChild(el("div", "close-hint", "Reload this rep to see it under Ride-along prep."));
+  return box;
 }
 
 function renderRideAlong(ra) {
@@ -591,6 +783,11 @@ function renderOpener(op) {
 /* ---- orchestration ---- */
 async function selectUser(id) {
   currentUser = id; currentRep = null;
+  // Always return to the brief view when switching identity (the toggle re-appears only for
+  // leadership, decided by loadScope -> updateViewToggle).
+  currentView = "brief";
+  $("#briefview").hidden = false;
+  $("#themesview").hidden = true;
   renderUserSeg();
   $("#brief").innerHTML = '<div class="placeholder">Select a rep to open their full coaching brief.</div>';
   await Promise.all([loadScope(), loadReps()]);

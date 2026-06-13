@@ -57,14 +57,31 @@ def test_index_page_is_served_as_html(client):
         assert uid in body
 
 
-def test_page_is_read_only_and_calls_only_get_endpoints(client):
+def test_page_reads_via_get_and_its_only_write_is_the_close_capture(client):
     body = client.get("/").text
-    # It references the three GET endpoints...
+    # It references the read endpoints (incl. the leadership themes GET)...
     assert "/api/whoami" in body
     assert "/api/reps" in body
     assert "/api/brief/" in body
-    # ...and never issues a mutating fetch (no write verb anywhere in the page script).
-    assert not re.search(r"""method\s*:\s*['"](POST|PUT|PATCH|DELETE)['"]""", body, re.I)
+    assert "/api/themes" in body
+    # ...issues NO destructive verb anywhere...
+    assert not re.search(r"""method\s*:\s*['"](PUT|PATCH|DELETE)['"]""", body, re.I)
+    # ...and its ONLY write is the single CLOSE-capture POST (records the DM's own observations).
+    posts = re.findall(r"""method\s*:\s*['"]POST['"]""", body, re.I)
+    assert len(posts) == 1
+    assert "/close" in body  # the close-capture path that single POST targets
+
+
+def test_page_includes_the_themes_toggle_and_close_panel_markup(client):
+    body = client.get("/").text
+    # Leadership themes toggle (gated client-side to region/all scope) + its data path.
+    assert 'id="viewbar"' in body and 'id="themesview"' in body
+    assert "Leadership themes" in body
+    assert "/api/themes" in body
+    # Record close panel + its verbatim-observations affordance.
+    assert "close-panel" in body
+    assert "Record close" in body
+    assert "Structure" in body  # the structure-&-save action
 
 
 def test_ui_layer_exposes_no_write_route(client):
